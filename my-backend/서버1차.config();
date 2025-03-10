@@ -1,0 +1,123 @@
+require('dotenv').config();
+const express = require('express');
+const multer = require('multer');
+const { exec } = require('child_process');
+const cors = require('cors'); // 추가된 CORS 설정
+const pool = require('./db'); // PostgreSQL DB 연결 설정
+
+const app = express();
+
+app.use(express.json());
+app.use(cors()); // CORS 미들웨어 추가
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: 'uploads/', // 업로드 디렉토리
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      cb(null, `${file.fieldname}-${uniqueSuffix}.jpg`);
+    },
+  }),
+});
+
+/**
+ * 1. building_polygon 데이터를 GeoJSON 형태로 반환하는 API
+ * 클라이언트에서 'floor' 값을 쿼리 파라미터로 전달받아 해당 층 데이터를 반환
+ */
+app.get('/api/buildings_in', async (req, res) => {
+  const { floor, buildingId } = req.query; // 클라이언트에서 보낸 'floor'와 'buildingId' 쿼리 파라미터
+  console.log('요청된 floor 값:', floor, '요청된 buildingId:', buildingId);
+
+  try {
+    if (!floor || isNaN(Number(floor)) || !buildingId || isNaN(Number(buildingId))) {
+      return res.status(400).json({ error: '유효한 floor 값과 buildingId가 필요합니다.' });
+    }
+
+    const sql = `
+      SELECT 
+        id_0, 
+        ST_AsGeoJSON(ST_Transform(geom, 4326)) AS geom_json
+      FROM building_in
+      WHERE floor = $1 AND building_i = $2; -- 선택된 층과 buildingId 필터링
+    `;
+
+    const result = await pool.query(sql, [Number(floor), Number(buildingId)]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('DB 에러:', err);
+    res.status(500).send('DB 에러');
+  }
+});
+
+/**
+ * 2. total_building 데이터를 GeoJSON 형태로 반환하는 API
+ * 클라이언트에서 건물 외곽 정보를 요청
+ */
+app.get('/api/total_building', async (req, res) => {
+  console.log('요청된 total_building 데이터'); // 로그 출력
+
+  try {
+    const sql = `
+      SELECT 
+        id_0, 
+        id,
+        ST_AsGeoJSON(ST_Transform(geom, 4326)) AS geom_json
+      FROM building
+      WHERE geom IS NOT NULL; -- geom이 NULL이 아닌 경우만 반환
+    `;
+
+    const result = await pool.query(sql);
+
+    // 쿼리 결과 로그
+    console.log('쿼리 결과:', result.rows);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('DB 에러:', err);
+    res.status(500).send('DB 에러');
+  }
+});
+
+/**
+ * 3. 이미지 업로드 및 MATLAB 처리 API
+ */
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  const imagePath = req.file.path;
+  const dataFilePath = process.env.MATLAB_DATA_PATH;
+  const matlabPath = `"C:\\Program Files\\MATLAB\\R2024a\\bin\\matlab.exe"`;
+  const matlabScriptPath = './matlab';
+
+  console.log('MATLAB 처리할 이미지 경로:', imagePath);
+  console.log('MATLAB 처리할 데이터 파일 경로:', dataFilePath);
+
+  console.time('MATLAB Execution'); // 시간 측정 시작
+  exec(
+    `${matlabPath} -batch "addpath('${matlabScriptPath}'); processImage('${imagePath}', '${dataFilePath}')"`,
+
+    (err, stdout, stderr) => {
+      console.timeEnd('MATLAB Execution'); // MATLAB 실행 시간 출력
+      if (err) {
+        console.error('MATLAB 실행 에러:', stderr);
+        return res.status(500).json({ message: 'MATLAB 처리 실패', error: stderr });
+      }
+
+      console.log('MATLAB stdout:', stdout);
+
+      try {
+        const result = JSON.parse(stdout.trim());
+        res.json(result);
+      } catch (parseError) {
+        console.error('MATLAB 결과 파싱 에러:', parseError);
+        res.status(500).json({ message: 'MATLAB 결과 파싱 실패', error: parseError.message });
+      }
+    }
+  );
+});
+
+/**
+ * 4. 서버 실행
+ */
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
