@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, StyleSheet,Image } from 'react-native';
 import MapComponent from './src/components/MapComponent';
 import FloorSelector from './src/components/FloorSelector';
 import LocationButton from './src/components/LocationButton';
+import CameraButton from "./src/components/CameraButton";
 import { fetchBuildingPolygons, fetchShortestPath, fetchNodes, fetchFloorPolygons, fetchEdgeCoordinates} from './src/services/api';
 import { findNearestNode } from './src/utils/findNearestNode';
 
@@ -31,6 +32,14 @@ const App = () => {
   // 최단 경로
   const [path, setPath] = useState([]);
   const [nodes, setNodes] = useState([]);
+
+  // 출발지 도착지 입력할 때 강제 focus변수 설정
+  const startInputRef = useRef(null);
+  const endInputRef = useRef(null);  
+
+  // 사진 찍힌 이미지 및 관리 state
+  // capturedImage: 찍힌 사진의 URI를 저장하는 state
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   // 폴리곤 불러오기
   useEffect(() => {
@@ -141,18 +150,33 @@ const App = () => {
       <View style={styles.inputContainer}>
         <Text style={styles.title}>서울시립대학교 캠퍼스 내비게이션</Text>
         <TextInput
+          ref={startInputRef}
           style={styles.input}
           placeholder="출발지를 입력하세요"
           value={startText}
           onChangeText={setStartText}
-          onSubmitEditing={() => geocodeAddress(startText, setStartLocation)}
+          onFocus={() => startInputRef.current?.focus()} // 터치하면 자동 포커스
+          onSubmitEditing={() => {
+            geocodeAddress(startText, setStartLocation);
+            Keyboard.dismiss();
+          }}
+          keyboardType="default"
+          returnKeyType="done"
         />
+
         <TextInput
+          ref={endInputRef}
           style={styles.input}
           placeholder="도착지를 입력하세요"
           value={endText}
           onChangeText={setEndText}
-          onSubmitEditing={() => geocodeAddress(endText, setEndLocation)}
+          onFocus={() => endInputRef.current?.focus()} // 터치하면 자동 포커스
+          onSubmitEditing={() => {
+            geocodeAddress(endText, setEndLocation);
+            Keyboard.dismiss();
+          }}
+          keyboardType="default"
+          returnKeyType="done"
         />
       </View>
 
@@ -169,6 +193,13 @@ const App = () => {
         setEndLocation={setEndLocation} 
         path = {path}
       />
+
+      
+      {/* 촬영된 이미지 표시 */}
+      {capturedImage && <Image source={{ uri: capturedImage }} style={styles.image} />}
+
+      {/* 카메라에서 찍은 사진 state에 저장 */}    
+      <CameraButton onCapture={setCapturedImage} /> 
 
       <LocationButton />
 

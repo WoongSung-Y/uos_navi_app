@@ -24,7 +24,7 @@ const MapComponent = ({
     const { latitude, longitude } = event.nativeEvent.coordinate;
     console.log("길게 누른 위치:", latitude, longitude);
 
-    setSelectedCoords({ latitude, longitude }); // 좌표 저장
+    setSelectedCoords({ latitude, longitude }); // 좌표 저장cd 
 
     if (mapRef.current) {
       try {
