@@ -1,58 +1,104 @@
-import React, { useRef, useState } from "react";
-import MapView, { Marker, Polygon, Polyline } from "react-native-maps";
-import { View, StyleSheet } from "react-native";
-import { Provider, Menu } from "react-native-paper";
+import React, { useRef, useState, useCallback, memo } from 'react';
+import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
+import { View, StyleSheet } from 'react-native';
+import { Provider, Menu } from 'react-native-paper';
+import type { Building, FloorPolygon, Coordinate, Path } from '../types/types'; // 경로 수정
 
-const MapComponent = ({ 
-  buildingPolygon, 
+// Props 타입 인터페이스 (추가)
+interface MapComponentProps {
+  buildingPolygon: Building[];
+  floorPolygons: FloorPolygon[];
+  selectedBuilding: number | null;
+  setSelectedBuilding: (id: number | null) => void;
+  startLocation: Coordinate | null;
+  endLocation: Coordinate | null;
+  setStartLocation: (coord: Coordinate | null) => void; // 추가된 prop
+  setEndLocation: (coord: Coordinate | null) => void;    // 추가된 prop
+  path: Path;
+}
+
+const PolygonRenderer = memo(({ 
+  features, 
+  fillColor,
+  onPress 
+}: {
+  features: Building[] | FloorPolygon[];
+  fillColor: string;
+  onPress?: (id: number) => void;
+}) => (
+  <>
+    {features.map((feature) => {
+      try {
+        const geojson = JSON.parse(feature.geom_json);
+        const polygons = geojson.type === "Polygon" ? [geojson.coordinates] : geojson.coordinates;
+
+        return polygons.map((polygon, i) => (
+          <Polygon
+            key={`polygon-${feature.id}-${i}`}
+            coordinates={polygon[0].map(([lng, lat]) => ({
+              latitude: lat,
+              longitude: lng,
+            }))}
+            fillColor={fillColor}
+            strokeColor="black"
+            strokeWidth={2}
+            tappable={!!onPress}
+            onPress={() => onPress?.(feature.id)}
+          />
+        ));
+      } catch (error) {
+        return null;
+      }
+    })}
+  </>
+));
+
+const MapComponent = memo(({
+  buildingPolygon,
   floorPolygons,
-  selectedBuilding, 
-  setSelectedBuilding, 
-  startLocation, 
-  endLocation, 
-  setStartLocation, 
-  setEndLocation, 
-  path 
-}) => {
+  selectedBuilding,
+  setSelectedBuilding,
+  startLocation,
+  endLocation,
+  setStartLocation, // 추가된 prop
+  setEndLocation,   // 추가된 prop
+  path
+}: MapComponentProps) => {
   const mapRef = useRef<MapView>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
-  const [selectedCoords, setSelectedCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [selectedCoords, setSelectedCoords] = useState<Coordinate | null>(null);
 
-  // 지도 길게 누를 때 출발지/도착지 설정
-  const handleLongPress = async (event) => {
+  const handleLongPress = useCallback(async (event) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
-    console.log("길게 누른 위치:", latitude, longitude);
-
-    setSelectedCoords({ latitude, longitude }); // 좌표 저장cd 
+    setSelectedCoords({ latitude, longitude });
 
     if (mapRef.current) {
       try {
         const point = await mapRef.current.pointForCoordinate({ latitude, longitude });
-        console.log("변환된 화면 좌표:", point);
         setMenuPosition({ x: point.x, y: point.y });
         setMenuVisible(true);
       } catch (error) {
-        console.error("좌표 변환 오류:", error);
+        console.error("Coordinate conversion error:", error);
       }
     }
-  };
+  }, []);
 
-  // 출발지 설정
-  const setAsStartLocation = () => {
+  // 수정된 부분: 의존성 배열 추가
+  const setAsStartLocation = useCallback(() => {
     if (selectedCoords) {
       setStartLocation(selectedCoords);
       setMenuVisible(false);
     }
-  };
+  }, [selectedCoords, setStartLocation]);
 
-  // 도착지 설정
-  const setAsEndLocation = () => {
+  // 수정된 부분: 의존성 배열 추가
+  const setAsEndLocation = useCallback(() => {
     if (selectedCoords) {
       setEndLocation(selectedCoords);
       setMenuVisible(false);
     }
-  };
+  }, [selectedCoords, setEndLocation]);
 
   return (
     <Provider>
@@ -67,100 +113,77 @@ const MapComponent = ({
             longitudeDelta: 0.007,
           }}
           onLongPress={handleLongPress}
+          accessibilityLabel="Campus map"
+          accessibilityHint="Interactive map for campus navigation"
         >
-          {/*** 건물 폴리곤 렌더링 ***/}
-          {buildingPolygon.map((feature, index) => {
-            try {
-              const geojson = JSON.parse(feature.geom_json);
-              const polygons = geojson.type === "Polygon" ? [geojson.coordinates] : geojson.coordinates;
+          <PolygonRenderer
+            features={buildingPolygon}
+            fillColor={selectedBuilding ? "rgba(0, 0, 255, 0.3)" : "rgba(255, 0, 0, 0.3)"}
+            onPress={setSelectedBuilding}
+          />
 
-              return polygons.map((polygon, i) => {
-                const coords = polygon[0].map(([lng, lat]) => ({
-                  latitude: lat,
-                  longitude: lng,
-                }));
+          <PolygonRenderer
+            features={floorPolygons}
+            fillColor="rgba(0, 255, 0, 0.3)"
+          />
 
-                return (
-                  <Polygon
-                    key={`${index}-${i}`}
-                    coordinates={coords}
-                    fillColor={selectedBuilding === feature.id ? "rgba(0, 0, 255, 0.3)" : "rgba(255, 0, 0, 0.3)"}
-                    strokeColor="black"
-                    strokeWidth={2}
-                    tappable
-                    onPress={() => setSelectedBuilding(feature.id)}
-                  />
-                );
-              });
-            } catch (error) {
-              console.error(`건물 폴리곤 오류 (건물 ID: ${feature.id}):`, error);
-              return null;
-            }
-          })}
+          {startLocation && (
+            <Marker
+              coordinate={startLocation}
+              title="Start"
+              pinColor="blue"
+              accessibilityLabel="Start location"
+            />
+          )}
 
-          {/*** 층별 폴리곤 렌더링 ***/}
-          {floorPolygons.map((feature, index) => {
-            try {
-              const geojson = JSON.parse(feature.geom_json);
-              const polygons = geojson.type === "Polygon" ? [geojson.coordinates] : geojson.coordinates;
+          {endLocation && (
+            <Marker
+              coordinate={endLocation}
+              title="End"
+              pinColor="red"
+              accessibilityLabel="Destination"
+            />
+          )}
 
-              return polygons.map((polygon, i) => {
-                const coords = polygon[0].map(([lng, lat]) => ({
-                  latitude: lat,
-                  longitude: lng,
-                }));
-
-                return (
-                  <Polygon
-                    key={`floor-${index}-${i}`}
-                    coordinates={coords}
-                    fillColor="rgba(0, 255, 0, 0.3)"
-                    strokeColor="black"
-                    strokeWidth={2}
-                  />
-                );
-              });
-            } catch (error) {
-              console.error(`층 폴리곤 오류 (층 ID: ${feature.id}):`, error);
-              return null;
-            }
-          })}
-
-          {/*** 출발지 & 도착지 마커 ***/}
-          {startLocation && <Marker coordinate={startLocation} title="출발지" pinColor="blue" />}
-          {endLocation && <Marker coordinate={endLocation} title="도착지" pinColor="red" />}
-
-          {/*** 최단 경로 표시 ***/}
           {path.length > 0 && (
-            <Polyline 
-              coordinates={path.flatMap(edge => edge.coordinates)} 
-              strokeWidth={5} 
-              strokeColor="blue" 
+            <Polyline
+              coordinates={path.flatMap(edge => edge.coordinates)}
+              strokeWidth={5}
+              strokeColor="blue"
+              accessibilityLabel="Navigation path"
             />
           )}
         </MapView>
 
-        {/*** 출발지/도착지 선택 메뉴 ***/}
         {menuVisible && menuPosition && (
           <View style={{ position: 'absolute', left: menuPosition.x, top: menuPosition.y }}>
             <Menu
               visible={menuVisible}
               onDismiss={() => setMenuVisible(false)}
-              anchor={<View style={{ width: 1, height: 1 }} />}
+              anchor={<View style={styles.menuAnchor} />}
             >
-              <Menu.Item onPress={setAsStartLocation} title="출발지로 설정" />
-              <Menu.Item onPress={setAsEndLocation} title="도착지로 설정" />
+              <Menu.Item 
+                onPress={setAsStartLocation} 
+                title="Set as Start"
+                accessibilityLabel="Set location as start point"
+              />
+              <Menu.Item 
+                onPress={setAsEndLocation} 
+                title="Set as Destination"
+                accessibilityLabel="Set location as destination"
+              />
             </Menu>
           </View>
         )}
       </View>
     </Provider>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
+  menuAnchor: { width: 1, height: 1 }
 });
 
 export default MapComponent;

@@ -1,152 +1,156 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet,Image } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TextInput, StyleSheet, Image, Keyboard, Modal, TouchableOpacity } from 'react-native';
 import MapComponent from './src/components/MapComponent';
 import FloorSelector from './src/components/FloorSelector';
 import LocationButton from './src/components/LocationButton';
 import CameraButton from "./src/components/CameraButton";
 import { fetchBuildingPolygons, fetchShortestPath, fetchNodes, fetchFloorPolygons, fetchEdgeCoordinates} from './src/services/api';
 import { findNearestNode } from './src/utils/findNearestNode';
+import type { Building, FloorPolygon, Node, Path } from './src/types';
+import Toast from 'react-native-toast-message';
 
-// App 컴포넌트(TypeScript, 함수형 컴포넌트)
-// 최상위 컴포넌트
+// Coordinate 타입 정의
+type Coordinate = {
+  latitude: number;
+  longitude: number;
+};
+
 const App = () => {
-  const [floorPolygons, setFloorPolygons] = useState([]);
-   // buildingPolygon: 건물 데이터를 담는 '배열' state
-   // setBuildingPolygon: buildingPolygon의 state를 업데이트하는 함수
-   // 초기값은 빈 배열
-  const [buildingPolygon, setBuildingPolygon] = useState([]);
-  // selectedBuilding: 선택된 건물의 id를 저장하는 state
-  // setSelectedBuilding: selectedBuilding의 state를 업데이트하는 함수
-  // 선택되지 않은 경우 null, 선택된 경우 건물 id (number)
-  const [selectedBuilding, setSelectedBuilding] = useState(null);
-  // selectedFloor: 선택된 층을 저장하는 state
-  // setSelectedFloor: selectedFloor의 state를 업데이트하는 함수
-  // 기본값:1, 선택된 경우 층 수
-  const [selectedFloor, setSelectedFloor] = useState("1");
-  // 출발지와 도착지 state
-  // 출발지와 도착지 사용자가 입력할 수 있도록
-  const [startLocation, setStartLocation] = useState(null);
-  const [endLocation, setEndLocation] = useState(null);
+  const [floorPolygons, setFloorPolygons] = useState<FloorPolygon[]>([]);
+  const [buildingPolygon, setBuildingPolygon] = useState<Building[]>([]);
+  const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null);
+  const [selectedFloor, setSelectedFloor] = useState<string>("1");
+  const [startLocation, setStartLocation] = useState<Coordinate | null>(null);
+  const [endLocation, setEndLocation] = useState<Coordinate | null>(null);
   const [startText, setStartText] = useState("");
   const [endText, setEndText] = useState("");
-  // 최단 경로
-  const [path, setPath] = useState([]);
-  const [nodes, setNodes] = useState([]);
+  const [path, setPath] = useState<Path>([]);
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null); // 이미지 URI 저장
+  const [isImageVisible, setIsImageVisible] = useState(false);
 
-  // 출발지 도착지 입력할 때 강제 focus변수 설정
-  const startInputRef = useRef(null);
-  const endInputRef = useRef(null);  
+  const startInputRef = useRef<TextInput>(null);
+  const endInputRef = useRef<TextInput>(null);
 
-  // 사진 찍힌 이미지 및 관리 state
-  // capturedImage: 찍힌 사진의 URI를 저장하는 state
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const showErrorToast = (message: string) => {
+    Toast.show({
+      type: 'error',
+      text1: 'Error',
+      text2: message,
+      visibilityTime: 3000,
+    });
+  };
 
-  // 폴리곤 불러오기
-  useEffect(() => {
-    const loadBuildings = async () => {
-      try {
-        const data = await fetchBuildingPolygons(); // API 호출
-        setBuildingPolygon(data); // 상태 업데이트
-      } catch (error) {
-        console.error("건물 폴리곤 불러오기 실패:", error);
-      }
-    };
-    loadBuildings();
+  const loadBuildings = useCallback(async () => {
+    try {
+      const data = await fetchBuildingPolygons();
+      setBuildingPolygon(data);
+    } catch (error) {
+      showErrorToast('Failed to load buildings');
+    }
   }, []);
 
-  // 노드 데이터 불러오기
-    useEffect(() => {
-      const loadNodes = async () => {
-        try {
-          const data = await fetchNodes();
-          setNodes(data);
-        } catch (error) {
-          console.error("노드 데이터 불러오기 실패:", error);
-        }
-      };
-      loadNodes();
-    }, []);
-
-  // 건물을 클릭하면 해당 건물의 층별 폴리곤 불러오기
-  useEffect(() => {
-    const loadFloorPolygons = async () => {
-      if (selectedBuilding) {
-        try {
-          console.log(`선택된 건물 ID: ${selectedBuilding}, 층: ${selectedFloor}`);
-          const data = await fetchFloorPolygons(selectedFloor, selectedBuilding);
-          console.log(" 층별 폴리곤 데이터:", data);
-          setFloorPolygons(data);
-        } catch (error) {
-          console.error("층 폴리곤 불러오기 실패:", error);
-        }
-      }
-    };
-    loadFloorPolygons();
-  }, [selectedBuilding, selectedFloor]);
-    
-  // 주소를 입력하면 위도와 경도를 반환 // 추후 POI 데이터랑 API 필요
-  const geocodeAddress = async (address, setLocation) => {
-    if (!address) return;
+  const loadNodes = useCallback(async () => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${address}`);
-      const data = await response.json();
-      if (data.length > 0){
-        setLocation({latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon)});
-       }        
+      const data = await fetchNodes();
+      setNodes(data);
     } catch (error) {
-      console.error("Geocoding error: ", error);
+      showErrorToast('Failed to load nodes');
     }
-  }; 
+  }, []);
 
-  // 출발지/도착지가 설정될 때마다 최단 경로 업데이트
-  useEffect(() => {
-    const getRoute = async () => {
-      if (startLocation && endLocation && nodes.length > 0) {
+  const loadFloorPolygons = useCallback(async () => {
+    if (!selectedBuilding) return;
+    
+    try {
+      const data = await fetchFloorPolygons(selectedFloor, selectedBuilding);
+      setFloorPolygons(data);
+    } catch (error) {
+      showErrorToast('Failed to load floor data');
+    }
+  }, [selectedBuilding, selectedFloor]);
 
-        const startNode = findNearestNode(nodes, startLocation.latitude, startLocation.longitude, "outdoor");
-        const endNode = findNearestNode(nodes, endLocation.latitude, endLocation.longitude, "outdoor");
+  useEffect(() => { loadBuildings(); }, [loadBuildings]);
+  useEffect(() => { loadNodes(); }, [loadNodes]);
+  useEffect(() => { loadFloorPolygons(); }, [loadFloorPolygons]);
 
-        if (!startNode || !endNode) {
-          console.error("출발지 또는 도착지의 가장 가까운 노드를 찾을 수 없습니다.");
-          return;
-        }
+  const handleSetStartLocation = useCallback((coord: Coordinate | null) => {
+    setStartLocation(coord);
+  }, []);
 
-        try {
-          const shortestPath = await fetchShortestPath(startNode.node_id, endNode.node_id, "outdoor");
+  const handleSetEndLocation = useCallback((coord: Coordinate | null) => {
+    setEndLocation(coord);
+  }, []);
 
-          if (shortestPath.length > 0) {
-            // Edge ID 가져오기
-            const edgeIds = shortestPath.map(node => node.edge);
+  const handleImageCapture = useCallback((uri: string | null) => {
+    setCapturedImage(uri); // 이미지 URI 저장
+    if (uri) {
+      Toast.show({
+        type: 'success',
+        text1: '촬영 완료',
+        text2: '이미지가 저장되었습니다.',
+      });
+    }
+  }, []);
 
-            // Edge ID 기반으로 도로 좌표 가져오기
-            const edges = await fetchEdgeCoordinates(edgeIds);
-            console.log("Edge 좌표 데이터:", edges);
+  const closeImageModal = useCallback(() => {
+    setIsImageVisible(false);
+  }, []);
 
-            const convertedEdges = edges.map(edge => ({
-              id: edge.id,
-              coordinates: edge.coordinates.map(([lng, lat]) => ({
-                latitude: lat,
-                longitude: lng,
-              })),
-            }));
-            setPath(convertedEdges);
-          } else {
-            console.error("[ERROR] 최단 경로 없음!");
-            setPath([]);
-          }
-        } catch (error) {
-          console.error("최단 경로 요청 오류:", error);
-        }
+  const geocodeAddress = async (address: string, setLocation: (coord: Coordinate | null) => void) => {
+    if (!address.trim()) return;
+    
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`
+      );
+      const data = await response.json();
+      
+      if (data.length > 0) {
+        setLocation({
+          latitude: parseFloat(data[0].lat),
+          longitude: parseFloat(data[0].lon),
+        });
       }
-    };
-    getRoute();
+    } catch (error) {
+      showErrorToast('Address lookup failed');
+    }
+  };
+
+  const calculatePath = useCallback(async () => {
+    if (!startLocation || !endLocation || nodes.length === 0) return;
+
+    const startNode = findNearestNode(nodes, startLocation.latitude, startLocation.longitude, "outdoor");
+    const endNode = findNearestNode(nodes, endLocation.latitude, endLocation.longitude, "outdoor");
+
+    if (!startNode || !endNode) {
+      showErrorToast('Cannot find nearest node');
+      return;
+    }
+
+    try {
+      const shortestPath = await fetchShortestPath(startNode.node_id, endNode.node_id, "outdoor");
+      const edgeIds = shortestPath.map(node => node.edge);
+      const edges = await fetchEdgeCoordinates(edgeIds);
+
+      setPath(edges.map(edge => ({
+        id: edge.id,
+        coordinates: edge.coordinates.map(([lng, lat]) => ({
+          latitude: lat,
+          longitude: lng,
+        })),
+      })));
+    } catch (error) {
+      showErrorToast('Path calculation failed');
+    }
   }, [startLocation, endLocation, nodes]);
 
+  useEffect(() => { calculatePath(); }, [calculatePath]);
 
-  // 렌더링
   return (
     <View style={styles.container}>
-      {/* 출발지 & 도착지 입력 UI */}
+      <Toast />
+      
       <View style={styles.inputContainer}>
         <Text style={styles.title}>서울시립대학교 캠퍼스 내비게이션</Text>
         <TextInput
@@ -155,32 +159,26 @@ const App = () => {
           placeholder="출발지를 입력하세요"
           value={startText}
           onChangeText={setStartText}
-          onFocus={() => startInputRef.current?.focus()} // 터치하면 자동 포커스
           onSubmitEditing={() => {
             geocodeAddress(startText, setStartLocation);
             Keyboard.dismiss();
           }}
-          keyboardType="default"
           returnKeyType="done"
         />
-
         <TextInput
           ref={endInputRef}
           style={styles.input}
           placeholder="도착지를 입력하세요"
           value={endText}
           onChangeText={setEndText}
-          onFocus={() => endInputRef.current?.focus()} // 터치하면 자동 포커스
           onSubmitEditing={() => {
             geocodeAddress(endText, setEndLocation);
             Keyboard.dismiss();
           }}
-          keyboardType="default"
           returnKeyType="done"
         />
       </View>
 
-      {/* 지도 컴포넌트 */}
       <MapComponent 
         buildingPolygon={buildingPolygon} 
         floorPolygons={floorPolygons}
@@ -189,22 +187,38 @@ const App = () => {
         selectedFloor={selectedFloor} 
         startLocation={startLocation} 
         endLocation={endLocation} 
-        setStartLocation={setStartLocation} 
-        setEndLocation={setEndLocation} 
-        path = {path}
+        setStartLocation={handleSetStartLocation}
+        setEndLocation={handleSetEndLocation}
+        path={path}
       />
 
-      
-      {/* 촬영된 이미지 표시 */}
-      {capturedImage && <Image source={{ uri: capturedImage }} style={styles.image} />}
+      {/* 촬영된 이미지 미리보기 제거 */}
 
-      {/* 카메라에서 찍은 사진 state에 저장 */}    
-      <CameraButton onCapture={setCapturedImage} /> 
+      {/* 전체 화면 이미지 모달 (필요 시 사용) */}
+      <Modal
+        visible={isImageVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeImageModal}
+      >
+        <View style={styles.modalContainer}>
+          <Image
+            source={{ uri: capturedImage }}
+            style={styles.fullSizeImage}
+            resizeMode="contain"
+          />
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={closeImageModal}
+          >
+            <Text style={styles.closeText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
+      <CameraButton onCapture={handleImageCapture} />
       <LocationButton />
 
-
-      {/* 층 선택 UI */}
       {selectedBuilding !== null && (
         <FloorSelector
           selectedFloor={selectedFloor}
@@ -215,9 +229,10 @@ const App = () => {
   );
 };
 
-// 스타일 설정
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { 
+    flex: 1 
+  },
   inputContainer: {
     padding: 10,
     backgroundColor: "white",
@@ -237,6 +252,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginVertical: 5,
   },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  fullSizeImage: {
+    width: '90%',
+    height: '80%'
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1
+  },
+  closeText: {
+    fontSize: 24,
+    color: 'black'
+  }
 });
 
 export default App;

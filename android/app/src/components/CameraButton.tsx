@@ -1,9 +1,12 @@
 import React, { useEffect } from "react";
-import { View, TouchableOpacity, Text, StyleSheet, PermissionsAndroid, Platform } from "react-native";
-import { launchCamera } from "react-native-image-picker";
+import { View, TouchableOpacity, Text, StyleSheet, PermissionsAndroid, Platform, Alert } from "react-native";
+import { launchCamera, CameraOptions } from "react-native-image-picker";
 
-const CameraButton = ({ onCapture }) => {
-  // ✅ 안드로이드에서 카메라 권한 요청 함수
+type CameraButtonProps = {
+  onCapture: (uri: string | null) => void;
+};
+
+const CameraButton = ({ onCapture }: CameraButtonProps) => {
   const requestCameraPermission = async () => {
     try {
       if (Platform.OS === "android") {
@@ -17,10 +20,11 @@ const CameraButton = ({ onCapture }) => {
             buttonPositive: "허용",
           }
         );
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          console.log("카메라 권한이 허용됨");
-        } else {
-          console.log("카메라 권한이 거부됨");
+
+        if (granted === PermissionsAndroid.RESULTS.DENIED) {
+          Alert.alert('카메라 권한이 거부되었습니다.');
+        } else if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+          Alert.alert('카메라 권한이 영구적으로 거부되었습니다.', '설정에서 권한을 허용해주세요.');
         }
       }
     } catch (err) {
@@ -29,32 +33,36 @@ const CameraButton = ({ onCapture }) => {
   };
 
   useEffect(() => {
-    requestCameraPermission(); // 앱 실행 시 한 번 권한 요청
+    requestCameraPermission();
   }, []);
 
-  // 카메라 실행 함수
   const openCamera = async () => {
-    const options = {
+    const cameraOptions: CameraOptions = {
       mediaType: "photo",
       cameraType: "back",
-      saveToPhotos: true,
+      saveToPhotos: false, // 갤러리 저장 비활성화
+      quality: 0.8,
     };
-    // 카메라 버튼 누르면 실행되는 함수
-    launchCamera(options, (response) => {
+
+    launchCamera(cameraOptions, (response) => {
       if (response.didCancel) {
-        console.log("사용자가 카메라를 취소했습니다.");
+        onCapture(null); // 촬영 취소 시 null 전달
       } else if (response.errorCode) {
-        console.log("카메라 오류:", response.errorMessage);
-      } else if (response.assets && response.assets.length > 0) {
-        const imageUri = response.assets[0].uri;
-        onCapture(imageUri); // 촬영한 이미지 URI를 부모 컴포넌트에 전달
+        Alert.alert('카메라 오류', response.errorMessage || '알 수 없는 오류');
+        onCapture(null);
+      } else if (response.assets?.[0]?.uri) {
+        onCapture(response.assets[0].uri); // 촬영된 이미지 URI 전달
       }
     });
   };
 
   return (
-    <TouchableOpacity style={styles.button} onPress={openCamera}>
-      <Text style={styles.text}>📷 카메라</Text>
+    <TouchableOpacity 
+      style={styles.button} 
+      onPress={openCamera}
+      accessibilityLabel="사진 촬영 버튼"
+    >
+      <Text style={styles.text}>사진 촬영</Text>
     </TouchableOpacity>
   );
 };
