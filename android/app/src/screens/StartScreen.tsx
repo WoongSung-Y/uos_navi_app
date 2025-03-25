@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,22 +8,15 @@ import {
   Image,
   PermissionsAndroid,
   Platform,
+  Switch,
 } from 'react-native';
-import MapView, { Marker, Polygon, Callout } from 'react-native-maps';
-import { useNavigation } from '@react-navigation/native';
+import MapView, { Marker, Callout, Polygon } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
-
-import { fetchBuildingPolygons } from '../services/api';
-import type { Building } from '../types';
+import { useNavigation } from '@react-navigation/native';
+import { fetchBuildingPolygons, fetchPOINodes } from '../services/api';
+import type { Building, Node } from '../types';
 
 const categories = ['라운지', '도서관', '카페', '주차장'];
-
-const markerData = {
-  라운지: [{ name: '21관 라운지', coord: { latitude: 37.5836, longitude: 127.059 } }],
-  도서관: [{ name: '중앙도서관', coord: { latitude: 37.5842, longitude: 127.058 } }],
-  카페: [{ name: '학생회관 카페', coord: { latitude: 37.5829, longitude: 127.0575 } }],
-  주차장: [{ name: '건공관 주차장', coord: { latitude: 37.5833, longitude: 127.0565 } }],
-};
 
 const noticeMarker = {
   coord: { latitude: 37.5848, longitude: 127.0572 },
@@ -31,40 +24,35 @@ const noticeMarker = {
   description: '이곳은 공사 중입니다.',
 };
 
-const restaurantMarker = {
-  coord: { latitude: 37.5827, longitude: 127.0582 },
-  title: '점심 메뉴',
-  description: '제육덮밥 / 김치찌개 / 계란찜',
-};
-
 const StartScreen = () => {
   const navigation = useNavigation();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isSatellite, setIsSatellite] = useState(false);
-  const [mode, setMode] = useState<'default' | 'notice' | 'restaurant' | 'settings'>('default');
   const [currentLocation, setCurrentLocation] = useState<any>(null);
-  const [buildingPolygon, setBuildingPolygon] = useState<Building[]>([]);
+  const [buildingPolygons, setBuildingPolygons] = useState<Building[]>([]);
+  const [poiNodes, setPoiNodes] = useState<Node[]>([]);
+  const [mode, setMode] = useState<'default' | 'settings' | 'restaurant' | 'notice'>('default');
 
-  const noticeRef = useRef<any>(null);
-  const restaurantRef = useRef<any>(null);
+  const [userSettings, setUserSettings] = useState({
+    elderly: false,
+    wheelchair: false,
+    noSmokingZone: false,
+    noCarRoad: false,
+    freshman: false,
+  });
 
   const requestLocationPermission = async () => {
     if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: '위치 권한 요청',
-            message: '현재 위치를 사용하려면 권한이 필요합니다.',
-            buttonPositive: '허용',
-            buttonNegative: '거부',
-          }
-        );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      } catch (err) {
-        console.warn(err);
-        return false;
-      }
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: '위치 권한 요청',
+          message: '현재 위치를 사용하려면 권한이 필요합니다.',
+          buttonPositive: '허용',
+          buttonNegative: '거부',
+        }
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
     }
     return true;
   };
@@ -72,59 +60,93 @@ const StartScreen = () => {
   useEffect(() => {
     const trackLocation = async () => {
       const hasPermission = await requestLocationPermission();
-      if (!hasPermission) {
-        console.warn('위치 권한 거부됨');
-        return;
-      }
+      if (!hasPermission) return;
 
       Geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
           setCurrentLocation({ latitude, longitude });
         },
-        (error) => {
-          console.log('위치 추적 실패:', error.message);
+        (err) => {
+          console.warn('위치 추적 실패:', err.message);
         },
-        {
-          enableHighAccuracy: true,
-          distanceFilter: 5,
-          interval: 5000,
-          fastestInterval: 2000,
-        }
+        { enableHighAccuracy: true, distanceFilter: 5, interval: 5000, fastestInterval: 2000 }
       );
     };
-
     trackLocation();
   }, []);
 
   useEffect(() => {
-    const loadPolygons = async () => {
-      try {
-        const data = await fetchBuildingPolygons();
-        setBuildingPolygon(data);
-      } catch (err) {
-        console.error('건물 폴리곤 로딩 실패:', err);
-      }
-    };
-
-    loadPolygons();
+    fetchBuildingPolygons().then(setBuildingPolygons).catch(console.error);
+    fetchPOINodes().then(setPoiNodes).catch(console.error);
   }, []);
 
-  useEffect(() => {
-    if (mode === 'notice' && noticeRef.current) {
-      setTimeout(() => noticeRef.current.showCallout(), 300);
-    }
-    if (mode === 'restaurant' && restaurantRef.current) {
-      setTimeout(() => restaurantRef.current.showCallout(), 300);
-    }
-  }, [mode]);
+  const toggleSetting = (key: keyof typeof userSettings) => {
+    setUserSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const renderCategoryMarkers = () => {
+    if (!selectedCategory) return null;
+
+    return poiNodes
+      .filter((node) => node.lect_num?.includes(selectedCategory))
+      .map((node) => (
+        <Marker
+          key={node.node_id}
+          coordinate={{
+            latitude: parseFloat(node.latitude),
+            longitude: parseFloat(node.longitude),
+          }}
+        >
+          <Callout>
+            <Text>{node.lect_num}</Text>
+          </Callout>
+        </Marker>
+      ));
+  };
+
+  const renderRestaurantMarkers = () => {
+    if (mode !== 'restaurant') return null;
+
+    return poiNodes
+      .filter((node) => node.lect_num?.includes('식당'))
+      .map((node) => (
+        <Marker
+          key={node.node_id}
+          coordinate={{
+            latitude: parseFloat(node.latitude),
+            longitude: parseFloat(node.longitude),
+          }}
+          pinColor="orange"
+        >
+          <Callout>
+            <Text>{node.lect_num}</Text>
+          </Callout>
+        </Marker>
+      ));
+  };
+
+  const renderNoticeMarker = () => {
+    if (mode !== 'notice') return null;
+
+    return (
+      <Marker coordinate={noticeMarker.coord} pinColor="red">
+        <Callout>
+          <View style={styles.callout}>
+            <Text style={styles.calloutTitle}>{noticeMarker.title}</Text>
+            <Text>{noticeMarker.description}</Text>
+          </View>
+        </Callout>
+      </Marker>
+    );
+  };
 
   return (
     <View style={styles.container}>
       <MapView
         style={styles.map}
-        showsUserLocation={true}
-        followsUserLocation={true}
+        showsUserLocation
+        followsUserLocation
         mapType={isSatellite ? 'satellite' : 'standard'}
         initialRegion={{
           latitude: currentLocation?.latitude ?? 37.583738,
@@ -132,15 +154,12 @@ const StartScreen = () => {
           latitudeDelta: 0.007,
           longitudeDelta: 0.007,
         }}
-        minZoomLevel={16}
-        maxZoomLevel={20}
       >
-        {/* ✅ 건물 폴리곤 */}
-        {buildingPolygon.map((feature) => {
+        {/* 건물 폴리곤 */}
+        {buildingPolygons.map((feature) => {
           try {
             const geojson = JSON.parse(feature.geom_json);
             const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
-
             return polygons.map((polygon, i) => (
               <Polygon
                 key={`polygon-${feature.id}-${i}`}
@@ -148,7 +167,7 @@ const StartScreen = () => {
                   latitude: lat,
                   longitude: lng,
                 }))}
-                fillColor="rgba(0, 60, 180, 0.4)"
+                fillColor="rgba(0, 0, 255, 0.2)"
                 strokeColor="transparent"
                 strokeWidth={0}
               />
@@ -159,35 +178,9 @@ const StartScreen = () => {
           }
         })}
 
-        {/* ✅ 카테고리 마커 */}
-        {selectedCategory &&
-          markerData[selectedCategory]?.map((item, idx) => (
-            <Marker key={idx} coordinate={item.coord} title={item.name} />
-          ))}
-
-        {/* ✅ 공지사항 마커 */}
-        {mode === 'notice' && (
-          <Marker coordinate={noticeMarker.coord} pinColor="orange" ref={noticeRef}>
-            <Callout>
-              <View style={styles.calloutContainer}>
-                <Text style={styles.calloutTitle}>{noticeMarker.title}</Text>
-                <Text>{noticeMarker.description}</Text>
-              </View>
-            </Callout>
-          </Marker>
-        )}
-
-        {/* ✅ 학교식당 마커 */}
-        {mode === 'restaurant' && (
-          <Marker coordinate={restaurantMarker.coord} pinColor="green" ref={restaurantRef}>
-            <Callout>
-              <View style={styles.calloutContainer}>
-                <Text style={styles.calloutTitle}>{restaurantMarker.title}</Text>
-                <Text>{restaurantMarker.description}</Text>
-              </View>
-            </Callout>
-          </Marker>
-        )}
+        {renderCategoryMarkers()}
+        {renderRestaurantMarkers()}
+        {renderNoticeMarker()}
       </MapView>
 
       <View style={styles.searchContainer}>
@@ -245,6 +238,27 @@ const StartScreen = () => {
           <Image source={require('../../assets/settings.png')} style={styles.icon} />
         </TouchableOpacity>
       </View>
+
+      {mode === 'settings' && (
+        <View style={styles.settingPanel}>
+          <Text style={styles.settingTitle}>사용자 설정</Text>
+          {[
+            ['elderly', '노인'],
+            ['wheelchair', '휠체어 사용자'],
+            ['noSmokingZone', '흡연장 경유 X'],
+            ['noCarRoad', '차도 없는 경로'],
+            ['freshman', '새내기'],
+          ].map(([key, label]) => (
+            <View key={key} style={styles.settingRow}>
+              <Text style={styles.settingLabel}>{label}</Text>
+              <Switch
+                value={userSettings[key as keyof typeof userSettings]}
+                onValueChange={() => toggleSetting(key as keyof typeof userSettings)}
+              />
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 };
@@ -277,6 +291,27 @@ const styles = StyleSheet.create({
     borderRadius: 30, elevation: 5,
   },
   icon: { width: 24, height: 24 },
-  calloutContainer: { padding: 6 },
-  calloutTitle: { fontWeight: 'bold', marginBottom: 4 },
+  settingPanel: {
+    position: 'absolute', bottom: 100, left: 20, right: 20,
+    backgroundColor: 'white', padding: 15, borderRadius: 15, elevation: 10,
+  },
+  settingTitle: {
+    fontSize: 16, fontWeight: 'bold', marginBottom: 10, alignSelf: 'center',
+  },
+  settingRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginVertical: 5,
+  },
+  settingLabel: { fontSize: 14, color: '#333' },
+  callout: {
+    padding: 6,
+    backgroundColor: 'white',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  calloutTitle: {
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
 });

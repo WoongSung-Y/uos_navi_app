@@ -14,6 +14,18 @@ const handleError = (error: unknown) => {
   throw new Error('Unknown API error');
 };
 
+// POI 불러오기
+export const fetchPOINodes = async (): Promise<Node[]> => {
+  try {
+    const response = await apiClient.get('/api/nodes');
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    return [];
+  }
+};
+
+
 export const fetchBuildingPolygons = async (): Promise<Building[]> => {
   try {
     const response = await apiClient.get('/api/total_building');

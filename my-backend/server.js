@@ -84,17 +84,17 @@ app.get('/api/nodes', async (req, res) => {
       FROM node;
     `;
     const result = await pool.query(sql);
-    console.log("📡 DB에서 가져온 노드 데이터:", result.rows); // 디버깅 로그 추가
+    console.log("DB에서 가져온 노드 데이터:", result.rows); // 디버깅 로그 추가
 
     if (result.rows.length === 0) {
-      console.error("❌ [DB 문제] 노드 데이터가 없습니다.");
+      console.error("[DB 문제] 노드 데이터가 없습니다.");
       return res.status(500).json({ error: "데이터 없음: nodes 테이블이 비어 있음" });
     }
 
-    console.log("✅ 노드 데이터 조회 성공:", result.rows.length, "개");
+    console.log("노드 데이터 조회 성공:", result.rows.length, "개");
     res.json(result.rows);
   } catch (err) {
-    console.error("❌ [DB 오류] 노드 데이터 조회 실패:", err);
+    console.error("[DB 오류] 노드 데이터 조회 실패:", err);
     res.status(500).json({ error: "DB 에러 발생", details: err.message });
   }
 });
@@ -120,17 +120,17 @@ app.get('/api/shortest_path', async (req, res) => {
 `;
 
 try {
-  console.log("📝 실행할 SQL 쿼리:", query);
-  console.log("📌 전달할 파라미터:", Number(startNode), Number(endNode));
+  console.log("실행할 SQL 쿼리:", query);
+  console.log("전달할 파라미터:", Number(startNode), Number(endNode));
 
   const result = await pool.query(query, [Number(startNode), Number(endNode)]);
 
-  console.log("✅ 쿼리 결과:", result.rows);
+  console.log("쿼리 결과:", result.rows);
   // 📌 결과를 클라이언트에 반환
   res.json(result.rows);
 
 } catch (err) {
-  console.error("❌ 쿼리 실행 오류:", err);
+  console.error("쿼리 실행 오류:", err);
 }})
 
 
@@ -191,7 +191,7 @@ app.get('/api/edge_coordinates', async (req, res) => {
   `;
 
   try {
-    console.log("🛣️ 요청한 Edge ID 리스트:", edgeIdArray);
+    console.log("요청한 Edge ID 리스트:", edgeIdArray);
     const result = await pool.query(query, [edgeIdArray]);
 
     if (result.rows.length === 0) {
@@ -213,10 +213,10 @@ app.get('/api/edge_coordinates', async (req, res) => {
       };
     });
 
-    console.log("✅ GeoJSON 기반 Edge 데이터 반환:", JSON.stringify(edges, null, 2));
+    console.log("GeoJSON 기반 Edge 데이터 반환:", JSON.stringify(edges, null, 2));
     res.json(edges);
   } catch (err) {
-    console.error("❌ Edge 좌표 조회 실패:", err);
+    console.error("Edge 좌표 조회 실패:", err);
     res.status(500).json({ error: "DB 에러 발생", details: err.message });
   }
 });

@@ -1,34 +1,32 @@
-// 사용자가 지도에서 찍은 위치와 가장 가까운 노드를 찾는 컴포넌트
-// 방식은 수정될 수 있음
-export const findNearestNode = (nodes, lat, lon, type) => {
-    let minDist = Infinity;
-    let nearestNode = null;
+import type { Node } from '../types';
 
-    nodes.forEach(node => {
-        // longitude나 latitude가 null이면 무시
-        if (!node.longitude || !node.latitude) return;
+// 주어진 좌표(lat, lon)에서 가장 가까운 실외 노드 탐색
+export const findNearestNode = (
+  nodes: Node[],
+  lat: number,
+  lon: number,
+  type: 'outdoor' | 'indoor' = 'outdoor'
+): Node | null => {
+  let nearestNode: Node | null = null;
+  let minDist = Infinity;
 
-        // 실내/실외 타입이 일치하지 않으면 무시
-        if (node.type !== type) return;
+  for (const node of nodes) {
+    if (!node.latitude || !node.longitude) continue;
+    if (node.type !== type) continue;
 
-        const dist = Math.sqrt(Math.pow(node.latitude - lat, 2) + Math.pow(node.longitude - lon, 2));
-        if (dist < minDist) {
-            minDist = dist;
-            nearestNode = node;
-        }
-    });
+    const dist = Math.pow(lat - node.latitude, 2) + Math.pow(lon - node.longitude, 2);
 
-    if (!nearestNode) {
-        console.error("[노드 탐색 실패] 주어진 타입의 노드를 찾을 수 없음", type);
-        return null;
+    if (dist < minDist) {
+      minDist = dist;
+      nearestNode = node;
     }
+  }
 
-    console.log(`[가장 가까운 노드 찾음] ID=${nearestNode.node_id}, 위도=${nearestNode.latitude}, 경도=${nearestNode.longitude}, 타입=${nearestNode.type}`);
-    
-    return {
-        node_id: nearestNode.node_id, // node_id 추가
-        latitude: nearestNode.latitude,
-        longitude: nearestNode.longitude,
-        type: nearestNode.type
-    };
+  if (!nearestNode) {
+    console.warn(`[노드 탐색 실패] 타입: ${type}`);
+    return null;
+  }
+
+  console.log(`[가까운 노드] ID=${nearestNode.node_id}, 좌표=(${nearestNode.latitude}, ${nearestNode.longitude}), type=${nearestNode.type}`);
+  return nearestNode;
 };
