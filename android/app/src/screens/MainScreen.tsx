@@ -1,21 +1,21 @@
+// src/screens/MainScreen.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TextInput, StyleSheet, Image, Keyboard, Modal, TouchableOpacity } from 'react-native';
-import MapComponent from './src/components/MapComponent';
-import FloorSelector from './src/components/FloorSelector';
-import LocationButton from './src/components/LocationButton';
-import CameraButton from "./src/components/CameraButton";
-import { fetchBuildingPolygons, fetchShortestPath, fetchNodes, fetchFloorPolygons, fetchEdgeCoordinates} from './src/services/api';
-import { findNearestNode } from './src/utils/findNearestNode';
-import type { Building, FloorPolygon, Node, Path } from './src/types';
+import MapComponent from '../components/MapComponent';
+import FloorSelector from '../components/FloorSelector';
+import LocationButton from '../components/LocationButton';
+import CameraButton from "../components/CameraButton";
+import { fetchBuildingPolygons, fetchShortestPath, fetchNodes, fetchFloorPolygons, fetchEdgeCoordinates } from '../services/api';
+import { findNearestNode } from '../utils/findNearestNode';
+import type { Building, FloorPolygon, Node, Path } from '../types';
 import Toast from 'react-native-toast-message';
 
-// Coordinate 타입 정의
 type Coordinate = {
   latitude: number;
   longitude: number;
 };
 
-const App = () => {
+const MainScreen = () => {
   const [floorPolygons, setFloorPolygons] = useState<FloorPolygon[]>([]);
   const [buildingPolygon, setBuildingPolygon] = useState<Building[]>([]);
   const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null);
@@ -26,7 +26,7 @@ const App = () => {
   const [endText, setEndText] = useState("");
   const [path, setPath] = useState<Path>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null); // 이미지 URI 저장
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isImageVisible, setIsImageVisible] = useState(false);
 
   const startInputRef = useRef<TextInput>(null);
@@ -61,7 +61,7 @@ const App = () => {
 
   const loadFloorPolygons = useCallback(async () => {
     if (!selectedBuilding) return;
-    
+
     try {
       const data = await fetchFloorPolygons(selectedFloor, selectedBuilding);
       setFloorPolygons(data);
@@ -83,7 +83,7 @@ const App = () => {
   }, []);
 
   const handleImageCapture = useCallback((uri: string | null) => {
-    setCapturedImage(uri); // 이미지 URI 저장
+    setCapturedImage(uri);
     if (uri) {
       Toast.show({
         type: 'success',
@@ -99,13 +99,13 @@ const App = () => {
 
   const geocodeAddress = async (address: string, setLocation: (coord: Coordinate | null) => void) => {
     if (!address.trim()) return;
-    
+
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`
       );
       const data = await response.json();
-      
+
       if (data.length > 0) {
         setLocation({
           latitude: parseFloat(data[0].lat),
@@ -150,7 +150,7 @@ const App = () => {
   return (
     <View style={styles.container}>
       <Toast />
-      
+
       <View style={styles.inputContainer}>
         <Text style={styles.title}>서울시립대학교 캠퍼스 내비게이션</Text>
         <TextInput
@@ -179,22 +179,19 @@ const App = () => {
         />
       </View>
 
-      <MapComponent 
-        buildingPolygon={buildingPolygon} 
+      <MapComponent
+        buildingPolygon={buildingPolygon}
         floorPolygons={floorPolygons}
-        selectedBuilding={selectedBuilding} 
-        setSelectedBuilding={setSelectedBuilding} 
-        selectedFloor={selectedFloor} 
-        startLocation={startLocation} 
-        endLocation={endLocation} 
+        selectedBuilding={selectedBuilding}
+        setSelectedBuilding={setSelectedBuilding}
+        selectedFloor={selectedFloor}
+        startLocation={startLocation}
+        endLocation={endLocation}
         setStartLocation={handleSetStartLocation}
         setEndLocation={handleSetEndLocation}
         path={path}
       />
 
-      {/* 촬영된 이미지 미리보기 제거 */}
-
-      {/* 전체 화면 이미지 모달 (필요 시 사용) */}
       <Modal
         visible={isImageVisible}
         transparent={true}
@@ -207,10 +204,7 @@ const App = () => {
             style={styles.fullSizeImage}
             resizeMode="contain"
           />
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={closeImageModal}
-          >
+          <TouchableOpacity style={styles.closeButton} onPress={closeImageModal}>
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
         </View>
@@ -229,10 +223,10 @@ const App = () => {
   );
 };
 
+export default MainScreen;
+
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1 
-  },
+  container: { flex: 1 },
   inputContainer: {
     padding: 10,
     backgroundColor: "white",
@@ -279,5 +273,3 @@ const styles = StyleSheet.create({
     color: 'black'
   }
 });
-
-export default App;
