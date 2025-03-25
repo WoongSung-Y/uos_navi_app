@@ -13,8 +13,9 @@ import {
 import MapView, { Marker, Callout, Polygon } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import { useNavigation } from '@react-navigation/native';
-import { fetchBuildingPolygons, fetchPOINodes } from '../services/api';
-import type { Building, Node } from '../types';
+import { fetchBuildingPolygons, fetchPOINodes, fetchFloorPolygons } from '../services/api';
+import FloorSelector from '../components/FloorSelector';
+import type { Node, Coordinate, Building } from '../types/types';
 
 const categories = ['라운지', '도서관', '카페', '주차장'];
 
@@ -25,6 +26,9 @@ const noticeMarker = {
 };
 
 const StartScreen = () => {
+  const [FloorPolygons, setFloorPolygons] = useState([]);
+  const [selectedFloor, setSelectedFloor] = useState<string>('1');
+  const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
   const navigation = useNavigation();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isSatellite, setIsSatellite] = useState(false);
@@ -56,6 +60,20 @@ const StartScreen = () => {
     }
     return true;
   };
+
+  useEffect(() => {
+    const loadFloorPolygons = async () => {
+      if (selectedBuildingId) {
+        try {
+          const data = await fetchFloorPolygons(selectedFloor, selectedBuildingId);
+          setFloorPolygons(data);
+        } catch (error) {
+          console.error('층 폴리곤 불러오기 실패:', error);
+        }
+      }
+    };
+    loadFloorPolygons();
+  }, [selectedBuildingId, selectedFloor]);
 
   useEffect(() => {
     const trackLocation = async () => {
@@ -153,7 +171,10 @@ const StartScreen = () => {
           longitude: currentLocation?.longitude ?? 127.058393,
           latitudeDelta: 0.007,
           longitudeDelta: 0.007,
+          
         }}
+        onPress={() => { setSelectedBuildingId(null);} }  
+
       >
         {/* 건물 폴리곤 */}
         {buildingPolygons.map((feature) => {
@@ -167,21 +188,58 @@ const StartScreen = () => {
                   latitude: lat,
                   longitude: lng,
                 }))}
-                fillColor="rgba(0, 0, 255, 0.2)"
+                fillColor={selectedBuildingId === feature.id ? "rgba(0, 0, 255, 0.6)" : "rgba(100, 100, 100, 0.4)"}
                 strokeColor="transparent"
                 strokeWidth={0}
-              />
+                tappable={true}
+                onPress={() => {console.log('눌린 건물 ID:', feature.id);
+                  setSelectedBuildingId(feature.id);}
+                }
+                />
             ));
           } catch (err) {
             console.warn('GeoJSON 파싱 실패:', err);
             return null;
           }
         })}
+          {/*** 층별 폴리곤 렌더링 ***/}
+          {FloorPolygons.map((feature, index) => {
+            try {
+              const geojson = JSON.parse(feature.geom_json);
+              const polygons = geojson.type === "Polygon" ? [geojson.coordinates] : geojson.coordinates;
+
+            return polygons.map((polygon, i) => {
+            const coords = polygon[0].map(([lng, lat]) => ({
+                  latitude: lat,
+                  longitude: lng,
+          }));
+
+          return (
+            <Polygon
+            key={`floor-${index}-${i}`}
+            coordinates={coords}
+            fillColor="rgba(0, 255, 0, 0.3)"
+            strokeColor="black"
+            strokeWidth={2}
+          />);
+        });
+            } catch (error) {
+              console.error(`층 폴리곤 오류 (층 ID: ${feature.id}):`, error);
+              return null;
+            }
+          })}
+        
 
         {renderCategoryMarkers()}
         {renderRestaurantMarkers()}
         {renderNoticeMarker()}
       </MapView>
+      {selectedBuildingId !== null && (
+        <FloorSelector
+          selectedFloor={selectedFloor}
+          setSelectedFloor={setSelectedFloor}
+        />
+      )}
 
       <View style={styles.searchContainer}>
         <TextInput

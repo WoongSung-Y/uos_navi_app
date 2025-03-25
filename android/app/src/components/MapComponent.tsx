@@ -31,7 +31,7 @@ const PolygonRenderer = memo(({
       try {
         const geojson = JSON.parse(feature.geom_json);
         const polygons = geojson.type === "Polygon" ? [geojson.coordinates] : geojson.coordinates;
-
+        
         return polygons.map((polygon, i) => (
           <Polygon
             key={`polygon-${feature.id}-${i}`}
@@ -42,7 +42,7 @@ const PolygonRenderer = memo(({
             fillColor={fillColor}
             strokeColor="black"
             strokeWidth={2}
-            tappable={!!onPress}
+            tappable={true}
             onPress={() => onPress?.(feature.id)}
           />
         ));

@@ -1,4 +1,4 @@
-import type { Node } from '../types';
+import type { Node } from '../types/types';
 
 // 주어진 좌표(lat, lon)에서 가장 가까운 실외 노드 탐색
 export const findNearestNode = (
