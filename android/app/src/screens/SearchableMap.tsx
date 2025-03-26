@@ -11,7 +11,7 @@ import {
   FlatList,
   BackHandler
 } from 'react-native';
-import MapView, { Marker, Callout, Polygon, Polyline } from 'react-native-maps';
+import MapView, { Marker, Callout, Polygon, Polyline, Circle } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import {
@@ -68,34 +68,34 @@ const StartScreen = () => {
     }, [selected, filtered])
   );
 
-  useEffect(() => {
-    const loadFloorPolygons = async () => {
-      if (selectedBuildingId) {
-        try {
-          const data = await fetchFloorPolygons(selectedFloor, selectedBuildingId);
-          setFloorPolygons(data);
-        } catch (error) {
-          console.error('층 폴리곤 불러오기 실패:', error);
+  const requestLocationPermission = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: '위치 권한 요청',
+          message: '현재 위치를 사용하려면 권한이 필요합니다.',
+          buttonPositive: '허용',
+          buttonNegative: '거부',
         }
-      }
-    };
-    loadFloorPolygons();
-  }, [selectedBuildingId, selectedFloor]);
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    }
+    return true;
+  };
 
   useEffect(() => {
     const trackLocation = async () => {
       const hasPermission = await requestLocationPermission();
       if (!hasPermission) return;
-      if (!currentLocation) {
-        Geolocation.getCurrentPosition(
-          (pos) => {
-            const { latitude, longitude } = pos.coords;
-            setCurrentLocation({ latitude, longitude });
-          },
-          (err) => console.warn('위치 가져오기 실패:', err.message),
-          { enableHighAccuracy: true }
-        );
-      }
+      Geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setCurrentLocation({ latitude, longitude });
+        },
+        (err) => console.warn('위치 추적 실패:', err.message),
+        { enableHighAccuracy: true, distanceFilter: 1 }
+      );
     };
     trackLocation();
   }, []);
@@ -172,26 +172,25 @@ const StartScreen = () => {
 
   return (
     <View style={styles.container}>
-      {(!fromNode && !toNode) && (
-        <TextInput
-          style={styles.searchInput}
-          placeholder="ex) 607호"
-          value={search}
-          onChangeText={(text) => {
-            setSearch(text);
-            setSelected(null);
-          }}
-        />
-      )}
+      <TextInput
+        style={styles.searchInput}
+        placeholder="ex) 607호"
+        value={search}
+        onChangeText={(text) => {
+          setSearch(text);
+          setSelected(null);
+        }}
+      />
+
       {(fromNode || toNode) && (
         <View style={styles.fixedRouteBox}>
           <Text>출발지: {fromNode?.lect_num || '미지정'} | 도착지: {toNode?.lect_num || '미지정'}</Text>
         </View>
       )}
+
       <MapView
         ref={mapRef}
         style={styles.map}
-        showsUserLocation
         followsUserLocation
         mapType={isSatellite ? 'satellite' : 'standard'}
         initialRegion={{
@@ -202,6 +201,16 @@ const StartScreen = () => {
         }}
         onLongPress={handleLongPress}
         onPress={() => setSelectedBuildingId(null)}>
+        {/* 현재 위치를 파란색 원으로 표시 */}
+        {currentLocation && (
+          <Circle
+            center={currentLocation}
+            radius={3}
+            strokeColor="blue"
+            fillColor="rgba(0,0,255,0.5)"
+          />
+        )}
+        
         {buildingPolygons.map((feature) => {
           try {
             const geojson = JSON.parse(feature.geom_json);
@@ -347,12 +356,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { ...StyleSheet.absoluteFillObject },
   searchInput: {
-    position: 'absolute', top: 40, left: 10, right: 10,
+    position: 'absolute', top: 20, left: 10, right: 10,
     height: 40, backgroundColor: 'white', borderRadius: 10,
     paddingHorizontal: 10, zIndex: 10, elevation: 5,
   },
   fixedRouteBox: {
-    position: 'absolute', top: 40, left: 10, right: 10,
+    position: 'absolute', top: 70, left: 10, right: 10,
     height: 40, backgroundColor: 'white', borderRadius: 10,
     paddingHorizontal: 10, justifyContent: 'center', zIndex: 10, elevation: 5,
   },

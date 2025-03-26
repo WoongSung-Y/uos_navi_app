@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ const noticeMarker = {
 };
 
 const StartScreen = () => {
+  const mapRef = useRef<MapView>(null);
   const [FloorPolygons, setFloorPolygons] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState<string>('1');
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
@@ -163,8 +164,10 @@ const StartScreen = () => {
     <View style={styles.container}>
       <MapView
         style={styles.map}
-        showsUserLocation
+        showsUserLocation = {true}
+        showsMyLocationButton={false}      // 버튼 숨기기
         followsUserLocation
+        showsBuildings={false} 
         mapType={isSatellite ? 'satellite' : 'standard'}
         initialRegion={{
           latitude: currentLocation?.latitude ?? 37.583738,
@@ -265,6 +268,27 @@ const StartScreen = () => {
           })}
         </View>
       </View>
+      <TouchableOpacity
+  style={styles.myLocationButton}
+  onPress={() => {
+    Geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        mapRef.current?.animateToRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        }, 500);
+      },
+      err => console.warn(err.message),
+      { enableHighAccuracy: true }
+    );
+  }}
+>
+  <Image source={require('../../assets/location-icon.png')} style={{ width: 30, height: 30 }} />
+</TouchableOpacity>
+
 
       <View style={styles.bottomButtons}>
         <TouchableOpacity style={styles.iconButton} onPress={() => {
@@ -327,7 +351,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { ...StyleSheet.absoluteFillObject },
   searchContainer: {
-    position: 'absolute', top: 50, left: 10, right: 10,
+    position: 'absolute', top: 20, left: 10, right: 10,
   },
   searchInput: {
     height: 40, backgroundColor: 'white', borderRadius: 10,
@@ -372,4 +396,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 2,
   },
+  myLocationButton: {
+    position: 'absolute',
+    top: 550, // search input보다 아래에
+    right: 15,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6, // Android 그림자
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  
 });
