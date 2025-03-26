@@ -1,3 +1,6 @@
+//시작화면 관리
+//GPS -> 위치파악, POI 데이터
+
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -19,12 +22,13 @@ import type { Node, Coordinate, Building } from '../types/types';
 
 const categories = ['라운지', '도서관', '카페', '주차장'];
 
-
+// 공지사항: 더미 데이터 -> 학교 홈페이지에서 크롤링 필요
 const noticeMarker = {
   coord: { latitude: 37.5848, longitude: 127.0572 },
   title: '공지사항',
   description: '이곳은 공사 중입니다.',
 };
+
 
 const StartScreen = () => {
   const mapStyle = [

@@ -25,6 +25,21 @@ const RouteScreen = () => {
   const flatListRef = useRef<FlatList>(null);
   const mapRef = useRef<MapView>(null);
 
+  const mapStyle = [
+    {
+      elementType: "labels",
+      stylers: [{ visibility: "off" }]
+    },
+    {
+      featureType: "poi",
+      stylers: [{ visibility: "on" }]
+    },
+    {
+      featureType: "transit",
+      stylers: [{ visibility: "on" }]
+    }
+  ];
+
   useEffect(() => {
     Geolocation.getCurrentPosition(
       (pos) => {
@@ -53,7 +68,7 @@ const RouteScreen = () => {
     <View style={styles.container}>
       {/* 지도 영역 */}
       <View style={styles.mapContainer}>
-        <MapView ref={mapRef} style={StyleSheet.absoluteFillObject}>
+        <MapView ref={mapRef} style={StyleSheet.absoluteFillObject} customMapStyle={mapStyle} showsUserLocation = {true} showsBuildings={false} >
           {path.map((edge) => (
             <Polyline
               key={edge.id}
@@ -70,9 +85,9 @@ const RouteScreen = () => {
               <Circle
                 key={`circle-${edge.id}`}
                 center={first}
-                radius={3}
-                strokeColor={i === currentIndex ? 'red' : 'gray'}
-                fillColor={i === currentIndex ? 'red' : 'gray'}
+                radius={1}
+                strokeColor={i === currentIndex ? 'cyan' : 'gray'}
+                fillColor={i === currentIndex ? 'cyan' : 'gray'}
               />
             );
           })}

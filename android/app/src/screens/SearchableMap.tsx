@@ -1,3 +1,4 @@
+//검색화면 -> POI 데이터 기반
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -48,6 +49,22 @@ const StartScreen = () => {
   const mapRef = useRef<MapView>(null);
   const [longPressCoord, setLongPressCoord] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
+
+  const mapStyle = [
+    {
+      elementType: "labels",
+      stylers: [{ visibility: "off" }]
+    },
+    {
+      featureType: "poi",
+      stylers: [{ visibility: "on" }]
+    },
+    {
+      featureType: "transit",
+      stylers: [{ visibility: "on" }]
+    }
+  ];
+
 
   useFocusEffect(
     React.useCallback(() => {
@@ -190,8 +207,11 @@ const StartScreen = () => {
 
       <MapView
         ref={mapRef}
+        customMapStyle={mapStyle}
         style={styles.map}
         followsUserLocation
+        showsUserLocation = {true}
+        showsBuildings={false} 
         mapType={isSatellite ? 'satellite' : 'standard'}
         initialRegion={{
           latitude: currentLocation?.latitude ?? 37.583738,
