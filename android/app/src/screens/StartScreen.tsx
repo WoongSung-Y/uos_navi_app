@@ -19,6 +19,7 @@ import type { Node, Coordinate, Building } from '../types/types';
 
 const categories = ['라운지', '도서관', '카페', '주차장'];
 
+
 const noticeMarker = {
   coord: { latitude: 37.5848, longitude: 127.0572 },
   title: '공지사항',
@@ -26,6 +27,23 @@ const noticeMarker = {
 };
 
 const StartScreen = () => {
+  const mapStyle = [
+    {
+      elementType: "labels",
+      stylers: [{ visibility: "off" }]
+    },
+    {
+      featureType: "poi",
+      stylers: [{ visibility: "on" }]
+    },
+    {
+      featureType: "transit",
+      stylers: [{ visibility: "on" }]
+    }
+  ];
+  
+
+  
   const mapRef = useRef<MapView>(null);
   const [FloorPolygons, setFloorPolygons] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState<string>('1');
@@ -163,6 +181,8 @@ const StartScreen = () => {
   return (
     <View style={styles.container}>
       <MapView
+        customMapStyle={mapStyle} // 이 부분 추가
+        provider="google" // 구글 지도 사용 시 필요
         style={styles.map}
         showsUserLocation = {true}
         showsMyLocationButton={false}      // 버튼 숨기기
