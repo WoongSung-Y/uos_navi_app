@@ -2,13 +2,18 @@ import React from 'react';
 import { TouchableOpacity, Image, StyleSheet } from 'react-native';
 import useLocation from '../hooks/useLocation';
 
-// useLocation 훅에서 geolocation 함수 가져옴
-// 버튼 클릭시 getLocation 함수 -> 현재 위치 가져옴(by 리액트 내장함수)
-const LocationButton = () => {
+const LocationButton = ({ setLocation }) => {
   const { getLocation } = useLocation();
 
+  const handlePress = async () => {
+    const location = await getLocation(); // ✅ 위치 가져오기
+    if (location) {
+      setLocation(location); // ✅ 부모(App)로 위치 전달
+    }
+  };
+
   return (
-    <TouchableOpacity style={styles.button} onPress={getLocation}>
+    <TouchableOpacity style={styles.button} onPress={handlePress}>
       <Image source={require('../../assets/location-icon.png')} style={styles.icon} />
     </TouchableOpacity>
   );

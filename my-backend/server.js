@@ -168,6 +168,8 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
   );
 });
 
+
+
 // Edge 좌표 조회 API
 // Edge ID 목록을 파라미터로 받아서 해당 Edge의 좌표 데이터를 반환
 app.get('/api/edge_coordinates', async (req, res) => {

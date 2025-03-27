@@ -6,7 +6,6 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 const FloorSelector = ({ selectedFloor, setSelectedFloor }: any) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>층 선택:</Text>
       <View style={styles.buttons}>
         {['1', '2', '3', '4', '5', '6'].map((floor) => (
           <TouchableOpacity

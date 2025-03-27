@@ -1,242 +1,199 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet,Image } from 'react-native';
+// App.tsx - Navigation 포함, 화면 분리 없이 구성
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MapComponent from './src/components/MapComponent';
 import FloorSelector from './src/components/FloorSelector';
-import LocationButton from './src/components/LocationButton';
-import CameraButton from "./src/components/CameraButton";
-import { fetchBuildingPolygons, fetchShortestPath, fetchNodes, fetchFloorPolygons, fetchEdgeCoordinates} from './src/services/api';
-import { findNearestNode } from './src/utils/findNearestNode';
+import CameraButton from './src/components/CameraButton';
+import MarkerEditor from './src/components/MarkerEditor';
+import { fetchBuildingPolygons, fetchFloorPolygons, fetchalledge, fetchNodes } from './src/services/api';
+import useLocation from './src/hooks/useLocation';
 
-// App 컴포넌트(TypeScript, 함수형 컴포넌트)
-// 최상위 컴포넌트
-const App = () => {
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+export type RootStackParamList = {
+  Map: undefined;
+  MarkerEditor: {
+    imageUri: string;
+    edgeId: number;
+    direction: number;
+  };
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const MapScreen = ({ navigation }) => {
   const [floorPolygons, setFloorPolygons] = useState([]);
-   // buildingPolygon: 건물 데이터를 담는 '배열' state
-   // setBuildingPolygon: buildingPolygon의 state를 업데이트하는 함수
-   // 초기값은 빈 배열
   const [buildingPolygon, setBuildingPolygon] = useState([]);
-  // selectedBuilding: 선택된 건물의 id를 저장하는 state
-  // setSelectedBuilding: selectedBuilding의 state를 업데이트하는 함수
-  // 선택되지 않은 경우 null, 선택된 경우 건물 id (number)
   const [selectedBuilding, setSelectedBuilding] = useState(null);
-  // selectedFloor: 선택된 층을 저장하는 state
-  // setSelectedFloor: selectedFloor의 state를 업데이트하는 함수
-  // 기본값:1, 선택된 경우 층 수
-  const [selectedFloor, setSelectedFloor] = useState("1");
-  // 출발지와 도착지 state
-  // 출발지와 도착지 사용자가 입력할 수 있도록
-  const [startLocation, setStartLocation] = useState(null);
-  const [endLocation, setEndLocation] = useState(null);
-  const [startText, setStartText] = useState("");
-  const [endText, setEndText] = useState("");
-  // 최단 경로
-  const [path, setPath] = useState([]);
+  const [selectedFloor, setSelectedFloor] = useState('1');
+  const [selectedEdgeId, setSelectedEdgeId] = useState<number | null>(null);
+  const [allEdge, setallEdge] = useState([]);
+  const { location } = useLocation();
+  const [selectedType, setSelectedType] = useState<'indoor' | 'outdoor'>('indoor');
   const [nodes, setNodes] = useState([]);
 
-  // 출발지 도착지 입력할 때 강제 focus변수 설정
-  const startInputRef = useRef(null);
-  const endInputRef = useRef(null);  
+  useEffect(() => {
+    const loadNodes = async () => {
+      try {
+        const data = await fetchNodes(); // 이미 만들어둔 fetchNodes 사용
+        setNodes(data);
+      } catch (error) {
+        console.error('노드 데이터 로딩 실패:', error);
+      }
+    };
+    loadNodes();
+  }, []);
 
-  // 사진 찍힌 이미지 및 관리 state
-  // capturedImage: 찍힌 사진의 URI를 저장하는 state
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
-  // 폴리곤 불러오기
+  useEffect(() => {
+    const loadedge = async () => {
+      try {
+        const data = await fetchalledge(
+          selectedType === 'indoor' ? selectedFloor : null,
+          selectedType
+        );
+        setallEdge(data);
+      } catch (error) {
+        console.error('노드 데이터 불러오기 실패:', error);
+      }
+    };
+    loadedge();
+  }, [selectedFloor, selectedType]);
+  
   useEffect(() => {
     const loadBuildings = async () => {
       try {
-        const data = await fetchBuildingPolygons(); // API 호출
-        setBuildingPolygon(data); // 상태 업데이트
+        const data = await fetchBuildingPolygons();
+        setBuildingPolygon(data);
       } catch (error) {
-        console.error("건물 폴리곤 불러오기 실패:", error);
+        console.error('건물 폴리곤 불러오기 실패:', error);
       }
     };
     loadBuildings();
   }, []);
 
-  // 노드 데이터 불러오기
-    useEffect(() => {
-      const loadNodes = async () => {
-        try {
-          const data = await fetchNodes();
-          setNodes(data);
-        } catch (error) {
-          console.error("노드 데이터 불러오기 실패:", error);
-        }
-      };
-      loadNodes();
-    }, []);
-
-  // 건물을 클릭하면 해당 건물의 층별 폴리곤 불러오기
   useEffect(() => {
     const loadFloorPolygons = async () => {
       if (selectedBuilding) {
         try {
-          console.log(`선택된 건물 ID: ${selectedBuilding}, 층: ${selectedFloor}`);
           const data = await fetchFloorPolygons(selectedFloor, selectedBuilding);
-          console.log(" 층별 폴리곤 데이터:", data);
           setFloorPolygons(data);
         } catch (error) {
-          console.error("층 폴리곤 불러오기 실패:", error);
+          console.error('층 폴리곤 불러오기 실패:', error);
         }
       }
     };
     loadFloorPolygons();
   }, [selectedBuilding, selectedFloor]);
-    
-  // 주소를 입력하면 위도와 경도를 반환 // 추후 POI 데이터랑 API 필요
-  const geocodeAddress = async (address, setLocation) => {
-    if (!address) return;
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${address}`);
-      const data = await response.json();
-      if (data.length > 0){
-        setLocation({latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon)});
-       }        
-    } catch (error) {
-      console.error("Geocoding error: ", error);
-    }
-  }; 
 
-  // 출발지/도착지가 설정될 때마다 최단 경로 업데이트
-  useEffect(() => {
-    const getRoute = async () => {
-      if (startLocation && endLocation && nodes.length > 0) {
-
-        const startNode = findNearestNode(nodes, startLocation.latitude, startLocation.longitude, "outdoor");
-        const endNode = findNearestNode(nodes, endLocation.latitude, endLocation.longitude, "outdoor");
-
-        if (!startNode || !endNode) {
-          console.error("출발지 또는 도착지의 가장 가까운 노드를 찾을 수 없습니다.");
-          return;
-        }
-
-        try {
-          const shortestPath = await fetchShortestPath(startNode.node_id, endNode.node_id, "outdoor");
-
-          if (shortestPath.length > 0) {
-            // Edge ID 가져오기
-            const edgeIds = shortestPath.map(node => node.edge);
-
-            // Edge ID 기반으로 도로 좌표 가져오기
-            const edges = await fetchEdgeCoordinates(edgeIds);
-            console.log("Edge 좌표 데이터:", edges);
-
-            const convertedEdges = edges.map(edge => ({
-              id: edge.id,
-              coordinates: edge.coordinates.map(([lng, lat]) => ({
-                latitude: lat,
-                longitude: lng,
-              })),
-            }));
-            setPath(convertedEdges);
-          } else {
-            console.error("[ERROR] 최단 경로 없음!");
-            setPath([]);
-          }
-        } catch (error) {
-          console.error("최단 경로 요청 오류:", error);
-        }
-      }
-    };
-    getRoute();
-  }, [startLocation, endLocation, nodes]);
-
-
-  // 렌더링
   return (
     <View style={styles.container}>
-      {/* 출발지 & 도착지 입력 UI */}
       <View style={styles.inputContainer}>
-        <Text style={styles.title}>서울시립대학교 캠퍼스 내비게이션</Text>
-        <TextInput
-          ref={startInputRef}
-          style={styles.input}
-          placeholder="출발지를 입력하세요"
-          value={startText}
-          onChangeText={setStartText}
-          onFocus={() => startInputRef.current?.focus()} // 터치하면 자동 포커스
-          onSubmitEditing={() => {
-            geocodeAddress(startText, setStartLocation);
-            Keyboard.dismiss();
-          }}
-          keyboardType="default"
-          returnKeyType="done"
-        />
-
-        <TextInput
-          ref={endInputRef}
-          style={styles.input}
-          placeholder="도착지를 입력하세요"
-          value={endText}
-          onChangeText={setEndText}
-          onFocus={() => endInputRef.current?.focus()} // 터치하면 자동 포커스
-          onSubmitEditing={() => {
-            geocodeAddress(endText, setEndLocation);
-            Keyboard.dismiss();
-          }}
-          keyboardType="default"
-          returnKeyType="done"
-        />
+        <Text style={styles.title}>데이터 취득용 어플리케이션</Text>
       </View>
 
-      {/* 지도 컴포넌트 */}
-      <MapComponent 
-        buildingPolygon={buildingPolygon} 
+      <View style={styles.typeSelector}>
+  <TouchableOpacity
+    style={[
+      styles.typeButton,
+      selectedType === 'indoor' && styles.selectedTypeButton,
+    ]}
+    onPress={() => setSelectedType('indoor')}
+  >
+    <Text style={styles.typeButtonText}>실내</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={[
+      styles.typeButton,
+      selectedType === 'outdoor' && styles.selectedTypeButton,
+    ]}
+    onPress={() => setSelectedType('outdoor')}
+  >
+    <Text style={styles.typeButtonText}>실외</Text>
+  </TouchableOpacity>
+</View>
+
+
+      <MapComponent
+        buildingPolygon={buildingPolygon}
         floorPolygons={floorPolygons}
-        selectedBuilding={selectedBuilding} 
-        setSelectedBuilding={setSelectedBuilding} 
-        selectedFloor={selectedFloor} 
-        startLocation={startLocation} 
-        endLocation={endLocation} 
-        setStartLocation={setStartLocation} 
-        setEndLocation={setEndLocation} 
-        path = {path}
+        selectedBuilding={selectedBuilding}
+        setSelectedBuilding={setSelectedBuilding}
+        selectedFloor={selectedFloor}
+        currentLocation={location}
+        allEdge={allEdge}
+        setSelectedEdgeId={setSelectedEdgeId}
+        nodes={nodes}
       />
 
-      
-      {/* 촬영된 이미지 표시 */}
-      {capturedImage && <Image source={{ uri: capturedImage }} style={styles.image} />}
+<CameraButton
+  selectedEdgeId={selectedEdgeId}
+  allEdge={allEdge}
+  onCapture={({ uri, direction }) => {
+    navigation.navigate('MarkerEditor', {
+      imageUri: uri,
+      edgeId: selectedEdgeId ?? 0,
+      direction,
+      allEdge,
+    });
+  }}
+/>
 
-      {/* 카메라에서 찍은 사진 state에 저장 */}    
-      <CameraButton onCapture={setCapturedImage} /> 
-
-      <LocationButton />
 
 
-      {/* 층 선택 UI */}
       {selectedBuilding !== null && (
-        <FloorSelector
-          selectedFloor={selectedFloor}
-          setSelectedFloor={setSelectedFloor}
-        />
+        <FloorSelector selectedFloor={selectedFloor} setSelectedFloor={setSelectedFloor} />
       )}
     </View>
   );
 };
 
-// 스타일 설정
+const App = () => {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Map" screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Map" component={MapScreen} />
+        <Stack.Screen name="MarkerEditor" component={MarkerEditor} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   inputContainer: {
     padding: 10,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     elevation: 3,
   },
   title: {
     fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontWeight: 'bold',
+    textAlign: 'center',
     marginBottom: 10,
   },
-  input: {
-    height: 40,
-    borderColor: "#ddd",
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginVertical: 5,
+  typeSelector: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: 10,
   },
+  typeButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    backgroundColor: '#ddd',
+    borderRadius: 8,
+    marginHorizontal: 5,
+  },
+  selectedTypeButton: {
+    backgroundColor: '#4287f5',
+  },
+  typeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  
 });
 
 export default App;
