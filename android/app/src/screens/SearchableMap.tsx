@@ -191,7 +191,7 @@ const StartScreen = () => {
     <View style={styles.container}>
       <TextInput
         style={styles.searchInput}
-        placeholder="ex) 607호"
+        placeholder="검색"
         value={search}
         onChangeText={(text) => {
           setSearch(text);

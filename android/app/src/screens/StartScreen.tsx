@@ -1,6 +1,3 @@
-//시작화면 관리
-//GPS -> 위치파악, POI 데이터
-
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -18,36 +15,17 @@ import Geolocation from '@react-native-community/geolocation';
 import { useNavigation } from '@react-navigation/native';
 import { fetchBuildingPolygons, fetchPOINodes, fetchFloorPolygons } from '../services/api';
 import FloorSelector from '../components/FloorSelector';
-import type { Node, Coordinate, Building } from '../types/types';
+import type { Node, Building } from '../types/types';
 
 const categories = ['라운지', '도서관', '카페', '주차장'];
 
-// 공지사항: 더미 데이터 -> 학교 홈페이지에서 크롤링 필요
 const noticeMarker = {
   coord: { latitude: 37.5848, longitude: 127.0572 },
   title: '공지사항',
   description: '이곳은 공사 중입니다.',
 };
 
-
 const StartScreen = () => {
-  const mapStyle = [
-    {
-      elementType: "labels",
-      stylers: [{ visibility: "off" }]
-    },
-    {
-      featureType: "poi",
-      stylers: [{ visibility: "on" }]
-    },
-    {
-      featureType: "transit",
-      stylers: [{ visibility: "on" }]
-    }
-  ];
-  
-
-  
   const mapRef = useRef<MapView>(null);
   const [FloorPolygons, setFloorPolygons] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState<string>('1');
@@ -67,6 +45,12 @@ const StartScreen = () => {
     noCarRoad: false,
     freshman: false,
   });
+
+  const mapStyle = [
+    { elementType: "labels", stylers: [{ visibility: "off" }] },
+    { featureType: "poi", stylers: [{ visibility: "on" }] },
+    { featureType: "transit", stylers: [{ visibility: "on" }] },
+  ];
 
   const requestLocationPermission = async () => {
     if (Platform.OS === 'android') {
@@ -120,6 +104,7 @@ const StartScreen = () => {
   useEffect(() => {
     fetchBuildingPolygons().then(setBuildingPolygons).catch(console.error);
     fetchPOINodes().then(setPoiNodes).catch(console.error);
+    //fetchFloorPolygons().then(setFloorPolygons).catch(console.error);
   }, []);
 
   const toggleSetting = (key: keyof typeof userSettings) => {
@@ -128,48 +113,35 @@ const StartScreen = () => {
 
   const renderCategoryMarkers = () => {
     if (!selectedCategory) return null;
-
     return poiNodes
       .filter((node) => node.lect_num?.includes(selectedCategory))
       .map((node) => (
         <Marker
           key={node.node_id}
-          coordinate={{
-            latitude: parseFloat(node.latitude),
-            longitude: parseFloat(node.longitude),
-          }}
+          coordinate={{ latitude: parseFloat(node.latitude), longitude: parseFloat(node.longitude) }}
         >
-          <Callout>
-            <Text>{node.lect_num}</Text>
-          </Callout>
+          <Callout><Text>{node.lect_num}</Text></Callout>
         </Marker>
       ));
   };
 
   const renderRestaurantMarkers = () => {
     if (mode !== 'restaurant') return null;
-
     return poiNodes
       .filter((node) => node.lect_num?.includes('식당'))
       .map((node) => (
         <Marker
           key={node.node_id}
-          coordinate={{
-            latitude: parseFloat(node.latitude),
-            longitude: parseFloat(node.longitude),
-          }}
+          coordinate={{ latitude: parseFloat(node.latitude), longitude: parseFloat(node.longitude) }}
           pinColor="orange"
         >
-          <Callout>
-            <Text>{node.lect_num}</Text>
-          </Callout>
+          <Callout><Text>{node.lect_num}</Text></Callout>
         </Marker>
       ));
   };
 
   const renderNoticeMarker = () => {
     if (mode !== 'notice') return null;
-
     return (
       <Marker coordinate={noticeMarker.coord} pinColor="red">
         <Callout>
@@ -185,23 +157,22 @@ const StartScreen = () => {
   return (
     <View style={styles.container}>
       <MapView
-        customMapStyle={mapStyle} // 이 부분 추가
-        provider="google" // 구글 지도 사용 시 필요
+        ref={mapRef}
+        customMapStyle={mapStyle}
+        provider="google"
         style={styles.map}
-        showsUserLocation = {true}
-        showsMyLocationButton={false}      // 버튼 숨기기
+        showsUserLocation={true}
+        showsMyLocationButton={false}
         followsUserLocation
-        showsBuildings={false} 
+        showsBuildings={false}
         mapType={isSatellite ? 'satellite' : 'standard'}
         initialRegion={{
           latitude: currentLocation?.latitude ?? 37.583738,
           longitude: currentLocation?.longitude ?? 127.058393,
           latitudeDelta: 0.007,
           longitudeDelta: 0.007,
-          
         }}
-        onPress={() => { setSelectedBuildingId(null);} }  
-
+        onPress={() => setSelectedBuildingId(null)}
       >
         {/* 건물 폴리곤 */}
         {buildingPolygons.map((feature) => {
@@ -211,56 +182,51 @@ const StartScreen = () => {
             return polygons.map((polygon, i) => (
               <Polygon
                 key={`polygon-${feature.id}-${i}`}
-                coordinates={polygon[0].map(([lng, lat]) => ({
-                  latitude: lat,
-                  longitude: lng,
-                }))}
-                fillColor={selectedBuildingId === feature.id ? "rgba(0, 0, 255, 0.6)" : "rgba(100, 100, 100, 0.4)"}
+                coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+                fillColor={
+                  selectedBuildingId === feature.id
+                    ? "rgba(0, 0, 255, 0.6)"
+                    : "rgba(100, 100, 100, 0.4)"
+                }
                 strokeColor="transparent"
                 strokeWidth={0}
                 tappable={true}
-                onPress={() => {console.log('눌린 건물 ID:', feature.id);
-                  setSelectedBuildingId(feature.id);}
-                }
-                />
+                onPress={() => {
+                  console.log('Building selected:', feature.id); // 추가
+                  setSelectedBuildingId(feature.id);
+                }}
+              />
             ));
           } catch (err) {
             console.warn('GeoJSON 파싱 실패:', err);
             return null;
           }
         })}
-          {/*** 층별 폴리곤 렌더링 ***/}
-          {FloorPolygons.map((feature, index) => {
-            try {
-              const geojson = JSON.parse(feature.geom_json);
-              const polygons = geojson.type === "Polygon" ? [geojson.coordinates] : geojson.coordinates;
 
-            return polygons.map((polygon, i) => {
-            const coords = polygon[0].map(([lng, lat]) => ({
-                  latitude: lat,
-                  longitude: lng,
-          }));
-
-          return (
-            <Polygon
-            key={`floor-${index}-${i}`}
-            coordinates={coords}
-            fillColor="rgba(0, 255, 0, 0.3)"
-            strokeColor="black"
-            strokeWidth={2}
-          />);
-        });
-            } catch (error) {
-              console.error(`층 폴리곤 오류 (층 ID: ${feature.id}):`, error);
-              return null;
-            }
-          })}
-        
+        {/* 층 폴리곤 */}
+        {FloorPolygons.map((feature, index) => {
+          try {
+            const geojson = JSON.parse(feature.geom_json);
+            const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
+            return polygons.map((polygon, i) => (
+              <Polygon
+                key={`floor-${index}-${i}`}
+                coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+                fillColor="rgba(0, 255, 0, 0.3)"
+                strokeColor="black"
+                strokeWidth={2}
+              />
+            ));
+          } catch {
+            return null;
+          }
+        })}
 
         {renderCategoryMarkers()}
         {renderRestaurantMarkers()}
         {renderNoticeMarker()}
       </MapView>
+
       {selectedBuildingId !== null && (
         <FloorSelector
           selectedFloor={selectedFloor}
@@ -271,7 +237,7 @@ const StartScreen = () => {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="search"
+          placeholder="검색"
           onFocus={() => navigation.navigate('SearchableMap', { currentLocation })}
         />
         <View style={styles.categoryContainer}>
@@ -292,27 +258,27 @@ const StartScreen = () => {
           })}
         </View>
       </View>
-      <TouchableOpacity
-  style={styles.myLocationButton}
-  onPress={() => {
-    Geolocation.getCurrentPosition(
-      pos => {
-        const { latitude, longitude } = pos.coords;
-        mapRef.current?.animateToRegion({
-          latitude,
-          longitude,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
-        }, 500);
-      },
-      err => console.warn(err.message),
-      { enableHighAccuracy: true }
-    );
-  }}
->
-  <Image source={require('../../assets/location-icon.png')} style={{ width: 30, height: 30 }} />
-</TouchableOpacity>
 
+      <TouchableOpacity
+        style={styles.myLocationButton}
+        onPress={() => {
+          Geolocation.getCurrentPosition(
+            pos => {
+              const { latitude, longitude } = pos.coords;
+              mapRef.current?.animateToRegion({
+                latitude,
+                longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+              }, 500);
+            },
+            err => console.warn(err.message),
+            { enableHighAccuracy: true }
+          );
+        }}
+      >
+        <Image source={require('../../assets/location-icon.png')} style={{ width: 30, height: 30 }} />
+      </TouchableOpacity>
 
       <View style={styles.bottomButtons}>
         <TouchableOpacity style={styles.iconButton} onPress={() => {
@@ -374,9 +340,7 @@ export default StartScreen;
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { ...StyleSheet.absoluteFillObject },
-  searchContainer: {
-    position: 'absolute', top: 20, left: 10, right: 10,
-  },
+  searchContainer: { position: 'absolute', top: 20, left: 10, right: 10 },
   searchInput: {
     height: 40, backgroundColor: 'white', borderRadius: 10,
     paddingHorizontal: 10, marginBottom: 10, elevation: 3,
@@ -401,28 +365,20 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 100, left: 20, right: 20,
     backgroundColor: 'white', padding: 15, borderRadius: 15, elevation: 10,
   },
-  settingTitle: {
-    fontSize: 16, fontWeight: 'bold', marginBottom: 10, alignSelf: 'center',
-  },
+  settingTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, alignSelf: 'center' },
   settingRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginVertical: 5,
   },
   settingLabel: { fontSize: 14, color: '#333' },
   callout: {
-    padding: 6,
-    backgroundColor: 'white',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#ccc',
+    padding: 6, backgroundColor: 'white', borderRadius: 6,
+    borderWidth: 1, borderColor: '#ccc',
   },
-  calloutTitle: {
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
+  calloutTitle: { fontWeight: 'bold', marginBottom: 2 },
   myLocationButton: {
     position: 'absolute',
-    top: 550, // search input보다 아래에
+    top: 550,
     right: 15,
     width: 50,
     height: 50,
@@ -430,11 +386,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 6, // Android 그림자
+    elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  
 });
