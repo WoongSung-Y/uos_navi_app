@@ -4,7 +4,8 @@ import {
   Image,
   FlatList,
   StyleSheet,
-  Dimensions
+  Dimensions,
+  Text,
 } from 'react-native';
 import MapView, { Polyline, Circle, Polygon } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
@@ -14,20 +15,19 @@ import { fetchBuildingPolygons, fetchFloorPolygons } from '../services/api';
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
 
-// 버퍼 거리 계산 - 하버사인 거리
 const getDistanceInMeters = (coord1: Coordinate, coord2: Coordinate) => {
-  const R = 6371e3; // metres
+  const R = 6371e3;
   const φ1 = coord1.latitude * Math.PI / 180;
   const φ2 = coord2.latitude * Math.PI / 180;
   const Δφ = (coord2.latitude - coord1.latitude) * Math.PI / 180;
   const Δλ = (coord2.longitude - coord1.longitude) * Math.PI / 180;
 
   const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c; // in metres
+  return R * c;
 };
 
 const RouteScreen = () => {
@@ -39,6 +39,8 @@ const RouteScreen = () => {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(null);
+  const [accuracyDisplay, setAccuracyDisplay] = useState<number | null>(null);
+  const [pingCountDisplay, setPingCountDisplay] = useState<number>(0);
   const flatListRef = useRef<FlatList>(null);
   const mapRef = useRef<MapView>(null);
 
@@ -47,32 +49,58 @@ const RouteScreen = () => {
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
   const [buildingPolygons, setBuildingPolygons] = useState<Building[]>([]);
 
-  const THRESHOLD = 3; // Buffer //meters
+  const [isIndoor, setIsIndoor] = useState<boolean>(false);
+  const lastLocationUpdateTime = useRef<number>(Date.now());
+  const gpsPingCountInWindow = useRef<number>(0);
+
+  const THRESHOLD = 3;
 
   const mapStyle = [
-    {
-      elementType: "labels",
-      stylers: [{ visibility: "off" }]
-    },
-    {
-      featureType: "poi",
-      stylers: [{ visibility: "on" }]
-    },
-    {
-      featureType: "transit",
-      stylers: [{ visibility: "on" }]
-    }
+    { elementType: "labels", stylers: [{ visibility: "off" }] },
+    { featureType: "poi", stylers: [{ visibility: "on" }] },
+    { featureType: "transit", stylers: [{ visibility: "on" }] },
   ];
 
   useEffect(() => {
-    Geolocation.watchPosition(
+    const watchId = Geolocation.watchPosition(
       (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setCurrentLocation({ latitude, longitude });
+        const { latitude, longitude, accuracy } = pos.coords;
+        setAccuracyDisplay(accuracy);
+
+        if (accuracy && accuracy < 15) {
+          setCurrentLocation({ latitude, longitude });
+          lastLocationUpdateTime.current = Date.now();
+          gpsPingCountInWindow.current += 1;
+
+          console.log(
+            `📍 정확한 위치 수신 (accuracy: ${accuracy.toFixed(1)}m) - ${new Date().toLocaleTimeString()}`
+          );
+        } else {
+          console.log(`⚠️ 낮은 정확도 무시됨 (accuracy: ${accuracy?.toFixed(1)}m)`);
+        }
       },
       (err) => console.warn('위치 가져오기 실패:', err.message),
-      { enableHighAccuracy: true, distanceFilter: 1, interval: 1000, fastestInterval: 500 }
+      {
+        enableHighAccuracy: true,
+        distanceFilter: 0,
+        interval: 500,
+        fastestInterval: 500,
+      }
     );
+
+    const gpsPingStatsInterval = setInterval(() => {
+      const pingCount = gpsPingCountInWindow.current;
+      gpsPingCountInWindow.current = 0;
+      setPingCountDisplay(pingCount);
+
+      if (pingCount <= 2) {
+        setIsIndoor(true);
+      } else if (pingCount <= 6) {
+        setIsIndoor(true);
+      } else {
+        setIsIndoor(false);
+      }
+    }, 5000);
 
     const loadPolygons = async () => {
       try {
@@ -96,16 +124,20 @@ const RouteScreen = () => {
     };
 
     loadPolygons();
+
+    return () => {
+      Geolocation.clearWatch(watchId);
+      clearInterval(gpsPingStatsInterval);
+    };
   }, []);
 
-  // GPS 위치 기반 자동 노드 감지 및 인덱스 이동
   useEffect(() => {
     if (!currentLocation || path.length === 0) return;
 
     let nearestNodeImage: string | null = null;
 
     for (let i = 0; i < path.length; i++) {
-      const coord = path[i].coordinates[0]; // 각 edge의 대표 좌표
+      const coord = path[i].coordinates[0];
       const distance = getDistanceInMeters(currentLocation, coord);
       if (distance < THRESHOLD) {
         nearestNodeImage = nodeImageIds[i];
@@ -113,7 +145,6 @@ const RouteScreen = () => {
       }
     }
 
-    // 버퍼 안에 들어온 노드의 이미지가 있다면 해당 이미지를 업데이트
     if (nearestNodeImage && nearestNodeImage !== nodeImageIds[currentIndex]) {
       const newIndex = nodeImageIds.indexOf(nearestNodeImage);
       setCurrentIndex(newIndex);
@@ -121,7 +152,6 @@ const RouteScreen = () => {
     }
   }, [currentLocation]);
 
-  // currentIndex 변경 시 지도 이동
   useEffect(() => {
     const currentEdge = path[currentIndex];
     if (currentEdge?.coordinates?.length > 0) {
@@ -137,7 +167,6 @@ const RouteScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* 지도 영역 */}
       <View style={styles.mapContainer}>
         <MapView
           ref={mapRef}
@@ -146,7 +175,6 @@ const RouteScreen = () => {
           showsUserLocation={true}
           showsBuildings={false}
         >
-          {/* 최단 경로 표시 */}
           {path.map((edge) => (
             <Polyline
               key={edge.id}
@@ -194,7 +222,6 @@ const RouteScreen = () => {
             }
           })}
 
-          {/* 노드 위치 원 표시 */}
           {path.map((edge, i) => {
             const first = edge.coordinates[0];
             return (
@@ -208,17 +235,14 @@ const RouteScreen = () => {
             );
           })}
 
-          {/* 현재 GPS 위치와 주변 버퍼 원 표시 */}
           {currentLocation && (
             <>
-              {/* 실제 GPS 위치 */}
               <Circle
                 center={currentLocation}
                 radius={1}
                 strokeColor={'rgba(0,122,255,1)'}
                 fillColor={'rgba(0,122,255,0.3)'}
               />
-              {/* GPS 주변 버퍼 반경 */}
               <Circle
                 center={currentLocation}
                 radius={THRESHOLD}
@@ -228,9 +252,20 @@ const RouteScreen = () => {
             </>
           )}
         </MapView>
+
+        <View style={styles.statusBox}>
+          <Text style={{ fontSize: 14, color: isIndoor ? 'red' : 'green' }}>
+            {isIndoor ? '🔴 실내로 추정됨' : '🟢 실외로 추정됨'}
+          </Text>
+          <Text style={{ fontSize: 12, marginTop: 2 }}>
+            ⏱ 최근 5초간 수신 횟수: {pingCountDisplay}회
+          </Text>
+          <Text style={{ fontSize: 12, marginTop: 2 }}>
+            📏 GPS 정확도: {accuracyDisplay ? `${accuracyDisplay.toFixed(1)} m` : 'N/A'}
+          </Text>
+        </View>
       </View>
 
-      {/* 이미지 리스트 */}
       <View style={styles.imageListContainer}>
         <FlatList
           ref={flatListRef}
@@ -275,5 +310,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     borderRadius: 10,
     backgroundColor: '#ddd',
+  },
+  statusBox: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: 'white',
+    padding: 6,
+    borderRadius: 6,
+    elevation: 3,
   },
 });
