@@ -418,4 +418,3 @@ const styles = StyleSheet.create({
   buttonText: { color: 'white', fontWeight: 'bold' },
   detailText: { fontSize: 14, marginVertical: 2 }
 });
-

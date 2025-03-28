@@ -8,11 +8,11 @@ import {
 } from 'react-native';
 import MapView, { Polyline, Circle, Polygon } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
-import type { Coordinate, Building, FloorPolygon } from '../types/types';
 import { useRoute } from '@react-navigation/native';
 import { fetchBuildingPolygons, fetchFloorPolygons } from '../services/api';
 
 const screenHeight = Dimensions.get('window').height;
+const screenWidth = Dimensions.get('window').width;
 
 // 버퍼 거리 계산 - 하버사인 거리
 const getDistanceInMeters = (coord1: Coordinate, coord2: Coordinate) => {
@@ -102,14 +102,22 @@ const RouteScreen = () => {
   useEffect(() => {
     if (!currentLocation || path.length === 0) return;
 
+    let nearestNodeImage: string | null = null;
+
     for (let i = 0; i < path.length; i++) {
       const coord = path[i].coordinates[0]; // 각 edge의 대표 좌표
       const distance = getDistanceInMeters(currentLocation, coord);
-      if (distance < THRESHOLD && i !== currentIndex) {
-        setCurrentIndex(i);
-        flatListRef.current?.scrollToIndex({ index: i, animated: true });
+      if (distance < THRESHOLD) {
+        nearestNodeImage = nodeImageIds[i];
         break;
       }
+    }
+
+    // 버퍼 안에 들어온 노드의 이미지가 있다면 해당 이미지를 업데이트
+    if (nearestNodeImage && nearestNodeImage !== nodeImageIds[currentIndex]) {
+      const newIndex = nodeImageIds.indexOf(nearestNodeImage);
+      setCurrentIndex(newIndex);
+      flatListRef.current?.scrollToIndex({ index: newIndex, animated: true });
     }
   }, [currentLocation]);
 
@@ -232,13 +240,13 @@ const RouteScreen = () => {
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => item}
           onMomentumScrollEnd={(e) => {
-            const index = Math.round(e.nativeEvent.contentOffset.x / 250);
+            const index = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
             setCurrentIndex(index);
           }}
           renderItem={({ item }) => (
             <Image
               source={{ uri: `http://15.165.159.29:3000/images/${item}.jpg` }}
-              style={styles.image}
+              style={[styles.image, { width: screenWidth - 40 }]}
               resizeMode="cover"
             />
           )}
@@ -263,9 +271,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   image: {
-    width: 340,
     height: '100%',
-    marginHorizontal: 10,
+    marginHorizontal: 20,
     borderRadius: 10,
     backgroundColor: '#ddd',
   },

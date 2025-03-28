@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eee', paddingVertical: 6,
     paddingHorizontal: 12, borderRadius: 20,
   },
-  selectedButton: { backgroundColor: '#007bff' },
+  selectedButton: { backgroundColor: '#00B398' },
   categoryText: { fontWeight: 'bold', color: 'black' },
   bottomButtons: {
     position: 'absolute', bottom: 30, left: 20, right: 20,
