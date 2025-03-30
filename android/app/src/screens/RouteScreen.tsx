@@ -265,7 +265,7 @@ const RouteScreen = () => {
             <Image
               source={{ uri: `http://15.165.159.29:3000/images/${item}.jpg` }}
               style={[styles.image, { width: screenWidth - 40 }]}
-              resizeMode="cover"
+              resizeMode="contain"
             />
           )}
         />
@@ -285,7 +285,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   image: {
-    height: '100%',
+    width: '100%',
+    aspectRatio: 1.5,
     marginHorizontal: 20,
     borderRadius: 10,
     backgroundColor: '#ddd',
