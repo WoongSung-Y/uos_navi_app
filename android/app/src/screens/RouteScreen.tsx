@@ -1,3 +1,5 @@
+// 틀릴리가 없다
+// 틀리면 기필코 자살할 것
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -17,7 +19,11 @@ import { fetchBuildingPolygons, fetchFloorPolygons } from '../services/api';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
+const FIXED_THRESHOLD = 3; // 고정 버퍼 반경 (3m)
 
+// 사용자 ~ 노드까지 거리
+// 하버사인 공식
+// 하버사인을 쓰는 이유는 지금 우리가 받는 위치가 위도와 경도로 나타낸 GPS 좌표를 기반으로 했기 때문이다 이 우매한 짐승들아!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 const getDistanceInMeters = (coord1, coord2) => {
   const R = 6371e3;
   const φ1 = coord1.latitude * Math.PI / 180;
@@ -29,6 +35,7 @@ const getDistanceInMeters = (coord1, coord2) => {
   return R * c;
 };
 
+// 위치 권한 요청
 const requestLocationPermission = async () => {
   if (Platform.OS === 'android') {
     try {
@@ -57,10 +64,10 @@ const RouteScreen = () => {
   const { path, nodeImageIds } = route.params;
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [currentAccuracy, setCurrentAccuracy] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null); // 현재 GPS 좌표
+  const [currentAccuracy, setCurrentAccuracy] = useState(null); // 현재 GPS 정밀도
   const [accuracyHistory, setAccuracyHistory] = useState([]);
-  const [isIndoor, setIsIndoor] = useState(true);
+  const [isIndoor, setIsIndoor] = useState(true); //실내외 여부
   const [logMessages, setLogMessages] = useState<string[]>([]);
 
   const flatListRef = useRef(null);
@@ -76,6 +83,9 @@ const RouteScreen = () => {
     { featureType: "transit", stylers: [{ visibility: "on" }] },
   ];
 
+  // 위치 권한 확인 후, 0.5초마다 위치 수신 요청
+  // 성공시: 현재 좌표 & 정밀도 상태 갱신, 실내/실외 여부 업데이트
+  // 실패시: 정밀도 null로 설정
   useEffect(() => {
     const init = async () => {
       const hasPermission = await requestLocationPermission();
@@ -87,7 +97,7 @@ const RouteScreen = () => {
             const { latitude, longitude, accuracy } = pos.coords;
             const accText = typeof accuracy === 'number' && !isNaN(accuracy)
               ? `${accuracy.toFixed(1)}m`
-              : 'NaN';
+              : 'N/A';
 
             const log = `✅ 위치 수신됨: lat=${latitude.toFixed(6)}, lng=${longitude.toFixed(6)}, accuracy=${accText}`;
             console.log(log);
@@ -104,18 +114,10 @@ const RouteScreen = () => {
           },
           (err) => {
             const errMessage = typeof err?.message === 'string' ? err.message : 'Unknown error';
-            const log = `❌ 위치 수신 실패 (NaN) - ${errMessage}`;
+            const log = `❌ 위치 수신 실패 - ${errMessage}`;
             console.log(log);
             setLogMessages((prev) => [log, ...prev.slice(0, 2)]);
             setCurrentAccuracy(null);
-
-            // 🔥 수신 실패 시에도 accuracyHistory 갱신
-            setAccuracyHistory((prev) => {
-              const updated = [...prev.slice(-9), NaN];
-              const accurateCount = updated.filter(a => a < 10).length;
-              setIsIndoor(accurateCount < 10);
-              return updated;
-            });
           },
           { enableHighAccuracy: true, timeout: 1000, maximumAge: 0 }
         );
@@ -125,30 +127,19 @@ const RouteScreen = () => {
     };
 
     init();
-
-    const loadPolygons = async () => {
-      const buildings = await fetchBuildingPolygons();
-      setBuildingPolygons(buildings);
-      const allFloors = [];
-      for (const b of buildings) {
-        if (typeof b.id !== 'number') continue;
-        try {
-          const floor = await fetchFloorPolygons('1', b.id);
-          allFloors.push(...floor);
-        } catch {}
-      }
-      setFloorPolygons(allFloors);
-    };
-
-    loadPolygons();
   }, []);
+
+  // 노드 자동 전환 로직
+  // 고정 버퍼 반경 3m 안에 노드가 들어오면 해당 노드의 사진으로 전환
   useEffect(() => {
-    if (!currentLocation || path.length === 0 || !currentAccuracy || isNaN(currentAccuracy)) return;
+    if (!currentLocation || path.length === 0) return;
 
     for (let i = 0; i < path.length; i++) {
       const coord = path[i].coordinates[0];
       const distance = getDistanceInMeters(currentLocation, coord);
-      if (distance < currentAccuracy) {
+      
+      // 고정 버퍼 반경 안에 노드가 들어오면 사진 전환
+      if (distance < FIXED_THRESHOLD) {
         if (nodeImageIds[i] !== nodeImageIds[currentIndex]) {
           setCurrentIndex(i);
           flatListRef.current?.scrollToIndex({ index: i, animated: true });
@@ -158,6 +149,8 @@ const RouteScreen = () => {
     }
   }, [currentLocation]);
 
+  // 지도 중심 이동 로직
+  // 사진이 전환될 때, 현재 노드의 위치로 지도 중심 이동 (지도 화면이 자연스럽게)
   useEffect(() => {
     const currentEdge = path[currentIndex];
     if (currentEdge?.coordinates?.length > 0) {
@@ -171,6 +164,9 @@ const RouteScreen = () => {
     }
   }, [currentIndex]);
 
+  ////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////
+
   return (
     <View style={styles.container}>
       <MapView
@@ -181,9 +177,9 @@ const RouteScreen = () => {
         showsBuildings={false}
       >
         {path.map((edge) => (
-          <Polyline
+          <Polyline // 최단 경로 시각화
             key={edge.id}
-            coordinates={edge.coordinates}
+            coordinates={edge.coordinates} 
             strokeColor="blue"
             strokeWidth={4}
           />
@@ -209,36 +205,18 @@ const RouteScreen = () => {
           }
         })}
 
-        {FloorPolygons.map((feature, index) => {
-          try {
-            const geojson = JSON.parse(feature.geom_json);
-            const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
-            return polygons.map((polygon, i) => (
-              <Polygon
-                key={`floor-${index}-${i}`}
-                coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
-                fillColor="rgba(0, 255, 0, 0.3)"
-                strokeColor="black"
-                strokeWidth={2}
-              />
-            ));
-          } catch {
-            return null;
-          }
-        })}
-
         {path.map((edge, i) => (
-          <Circle
+          <Circle // 경로에 존재하는 노드 표시
             key={`circle-${edge.id}`}
             center={edge.coordinates[0]}
             radius={1}
-            strokeColor={i === currentIndex ? 'cyan' : 'gray'}
+            strokeColor={i === currentIndex ? 'cyan' : 'gray'} // 현재노드:cyan , 다른노드:gray
             fillColor={i === currentIndex ? 'cyan' : 'gray'}
           />
         ))}
 
-        {currentLocation && !isIndoor && currentAccuracy && (
-          <Circle
+        {currentLocation && !isIndoor && currentAccuracy && ( // 실외일 때만
+          <Circle // 정밀도 버퍼 -> 지도 상에서 표시되는 버퍼
             center={currentLocation}
             radius={currentAccuracy}
             strokeColor="rgba(0,200,0,0.6)"
@@ -253,7 +231,7 @@ const RouteScreen = () => {
           {isIndoor ? '🔴 실내로 추정됨' : '🟢 실외로 추정됨'}
         </Text>
         <Text style={{ fontSize: 12, marginTop: 2 }}>
-          📏 정밀도: {
+           정밀도: {
             currentAccuracy !== null && !isNaN(currentAccuracy)
               ? `${currentAccuracy.toFixed(1)} m`
               : 'N/A'
@@ -300,7 +278,7 @@ export default RouteScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  map: { height: screenHeight * 0.4 },
+  map: { height: screenHeight * 0.6 },
   imageListContainer: {
     height: screenHeight * 0.4,
     backgroundColor: '#f5f5f5',

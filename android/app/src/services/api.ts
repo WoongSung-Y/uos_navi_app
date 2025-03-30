@@ -25,7 +25,7 @@ export const fetchPOINodes = async (): Promise<Node[]> => {
   }
 };
 
-
+// 건물 폴리곤 불러오기
 export const fetchBuildingPolygons = async (): Promise<Building[]> => {
   try {
     const response = await apiClient.get('/api/total_building');
@@ -36,6 +36,7 @@ export const fetchBuildingPolygons = async (): Promise<Building[]> => {
   }
 };
 
+// 층 폴리곤 불러오기
 export const fetchFloorPolygons = async (
   floor: string,
   buildingId: number
@@ -51,6 +52,7 @@ export const fetchFloorPolygons = async (
   }
 };
 
+// 노드 불러오기
 export const fetchNodes = async (): Promise<Node[]> => {
   try {
     const response = await apiClient.get('/api/nodes');
@@ -61,6 +63,7 @@ export const fetchNodes = async (): Promise<Node[]> => {
   }
 };
 
+// 최단 경로 계산
 export const fetchShortestPath = async (
   startNode: number,
   endNode: number,
@@ -77,6 +80,7 @@ export const fetchShortestPath = async (
   }
 };
 
+// edge
 export const fetchEdgeCoordinates = async (
   edgeIds: number[]
 ): Promise<Edge[]> => {
