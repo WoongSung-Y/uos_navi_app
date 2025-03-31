@@ -19,7 +19,7 @@ import { fetchBuildingPolygons, fetchFloorPolygons } from '../services/api';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
-const FIXED_THRESHOLD = 3; // 고정 버퍼 반경 (3m)
+const FIXED_THRESHOLD = 5; // 고정 버퍼 반경 (5m)
 
 // 사용자 ~ 노드까지 거리
 // 하버사인 공식
@@ -121,7 +121,7 @@ const RouteScreen = () => {
           },
           { enableHighAccuracy: true, timeout: 1000, maximumAge: 0 }
         );
-      }, 500);
+      }, 500); //0.5초마다 GPS 요청 (500ms)
 
       return () => clearInterval(intervalId);
     };
@@ -130,7 +130,7 @@ const RouteScreen = () => {
   }, []);
 
   // 노드 자동 전환 로직
-  // 고정 버퍼 반경 3m 안에 노드가 들어오면 해당 노드의 사진으로 전환
+  // 고정 버퍼 반경 5m 안에 노드가 들어오면 해당 노드의 사진으로 전환
   useEffect(() => {
     if (!currentLocation || path.length === 0) return;
 
@@ -208,7 +208,7 @@ const RouteScreen = () => {
         {path.map((edge, i) => (
           <Circle // 경로에 존재하는 노드 표시
             key={`circle-${edge.id}`}
-            center={edge.coordinates[0]}
+            center={edge.coordinates[1]}
             radius={1}
             strokeColor={i === currentIndex ? 'cyan' : 'gray'} // 현재노드:cyan , 다른노드:gray
             fillColor={i === currentIndex ? 'cyan' : 'gray'}

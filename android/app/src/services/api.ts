@@ -67,11 +67,11 @@ export const fetchNodes = async (): Promise<Node[]> => {
 export const fetchShortestPath = async (
   startNode: number,
   endNode: number,
-  type: string
+  // type: string
 ): Promise<Node[]> => {
   try {
     const response = await apiClient.get('/api/shortest_path', {
-      params: { startNode, endNode, type }
+      params: { startNode, endNode }
     });
     return response.data;
   } catch (error) {

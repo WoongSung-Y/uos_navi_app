@@ -134,7 +134,7 @@ const StartScreen = () => {
   useEffect(() => {
     const drawPath = async () => {
       if (!fromNode || !toNode || fromNode.node_id === toNode.node_id) return;
-      const pathNodes = await fetchShortestPath(fromNode.node_id, toNode.node_id, 'outdoor');
+      const pathNodes = await fetchShortestPath(fromNode.node_id, toNode.node_id);
       const edgeIds = pathNodes.map(node => node.edge).filter(e => e !== '-1');
       if (edgeIds.length === 0) {
         setPath([]);
