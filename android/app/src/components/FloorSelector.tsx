@@ -1,13 +1,15 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 
-
-// 원하는 층 선택 UI 제공
 const FloorSelector = ({ selectedFloor, setSelectedFloor }: any) => {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>층 선택</Text>
-      <View style={styles.buttons}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.buttons}
+        showsVerticalScrollIndicator={false}
+      >
         {['1', '2', '3', '4', '5', '6'].map((floor) => (
           <TouchableOpacity
             key={floor}
@@ -27,26 +29,34 @@ const FloorSelector = ({ selectedFloor, setSelectedFloor }: any) => {
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    right: 10,
-    top: 300, // 필요에 따라 조절 가능
+  container: {  
+    alignSelf: 'flex-end', // 오른쪽 정렬
+    marginRight: 10,
+    marginTop: 10,
     backgroundColor: 'white',
     padding: 10,
     borderRadius: 15,
-    alignItems: 'center', // 텍스트/버튼 중앙 정렬
     elevation: 5,
+    maxHeight: 220,
+    top: 0,
   },
   text: {
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 10,
+    alignSelf: 'center',
+  },
+  scrollContainer: {
+    maxHeight: 100,
+  },
+  buttons: {
+    alignItems: 'center',
   },
   button: {
     paddingVertical: 6,
@@ -68,4 +78,5 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 });
+
 export default FloorSelector;

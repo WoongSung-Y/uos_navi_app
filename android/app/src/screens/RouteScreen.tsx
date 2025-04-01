@@ -16,6 +16,7 @@ import MapView, { Polyline, Circle, Polygon } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import { useRoute } from '@react-navigation/native';
 import { fetchBuildingPolygons, fetchFloorPolygons } from '../services/api';
+import FloorSelector from '../components/FloorSelector';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
@@ -72,6 +73,7 @@ const RouteScreen = () => {
 
   const flatListRef = useRef(null);
   const mapRef = useRef(null);
+  const [selectedFloor, setSelectedFloor] = useState<string>('1');
 
   const [FloorPolygons, setFloorPolygons] = useState([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
@@ -82,6 +84,31 @@ const RouteScreen = () => {
     { featureType: "poi", stylers: [{ visibility: "on" }] },
     { featureType: "transit", stylers: [{ visibility: "on" }] },
   ];
+
+
+    useEffect(() => {
+      const loadFloorPolygons = async () => {
+        if (selectedBuildingId) {
+          try {
+            const data = await fetchFloorPolygons(selectedFloor, selectedBuildingId);
+            setFloorPolygons(data);
+          } catch (error) {
+            console.error('층 폴리곤 불러오기 실패:', error);
+          }
+        }
+      };
+      loadFloorPolygons();
+    }, [selectedBuildingId, selectedFloor]);  
+
+  useEffect(() => {
+    const loadData = async () => {
+      const [buildings] = await Promise.all([
+        fetchBuildingPolygons(),
+      ]);
+      setBuildingPolygons(buildings);
+    };
+    loadData();
+  }, []);  
 
   // 위치 권한 확인 후, 0.5초마다 위치 수신 요청
   // 성공시: 현재 좌표 & 정밀도 상태 갱신, 실내/실외 여부 업데이트
@@ -169,12 +196,15 @@ const RouteScreen = () => {
 
   return (
     <View style={styles.container}>
+      
       <MapView
+      
         ref={mapRef}
         style={styles.map}
         customMapStyle={mapStyle}
         showsUserLocation={false}
         showsBuildings={false}
+        onPress={() => setSelectedBuildingId(null)}
       >
         {path.map((edge) => (
           <Polyline // 최단 경로 시각화
@@ -223,7 +253,35 @@ const RouteScreen = () => {
             fillColor="rgba(0,200,0,0.15)"
           />
         )}
+ {/* 층 폴리곤 */}
+        {FloorPolygons.map((feature, index) => {
+          try {
+            const geojson = JSON.parse(feature.geom_json);
+            const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
+            return polygons.map((polygon, i) => (
+              <Polygon
+                key={`floor-${index}-${i}`}
+                coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+                fillColor="rgba(0, 255, 0, 0.3)"
+                strokeColor="black"
+                strokeWidth={2}
+              />
+            ));
+          } catch {
+            return null;
+          }
+        })}   
+
       </MapView>
+      {selectedBuildingId !== null && (
+  <View style={styles.floorSelectorWrapper}>
+    <FloorSelector
+      selectedFloor={selectedFloor}
+      setSelectedFloor={setSelectedFloor}
+    />
+  </View>
+)}
+
 
       {/* 실외/실내 상태 및 정확도 텍스트 */}
       <View style={styles.statusBox}>
@@ -239,6 +297,7 @@ const RouteScreen = () => {
         </Text>
       </View>
 
+          
       {/* GPS 수신 로그 출력 */}
       <View style={styles.logBox}>
         <ScrollView>
@@ -268,7 +327,7 @@ const RouteScreen = () => {
               resizeMode="contain"
             />
           )}
-        />
+        />      
       </View>
     </View>
   );
@@ -315,4 +374,11 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 2,
   },
+  floorSelectorWrapper: {
+    position: 'absolute',
+    top: 130, // 상황 맞게 조정
+    right: 10,
+    zIndex: 1000,  // 무조건 맨 위에!
+    elevation: 10, // Android에서도 위에 보이게
+  },  
 });

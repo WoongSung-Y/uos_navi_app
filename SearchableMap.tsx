@@ -42,7 +42,6 @@ const StartScreen = () => {
   const [search, setSearch] = useState('');
   const [filtered, setFiltered] = useState<Node[]>([]);
   const [selected, setSelected] = useState<Node | null>(null);
-  const [NodePoint, setnodePoint] = useState<Node | null>(null);
   const navigation = useNavigation();
   const route = useRoute();
   const [isSatellite, setIsSatellite] = useState(false);
@@ -66,20 +65,6 @@ const StartScreen = () => {
     }
   ];
 
-  
-  useEffect(() => {
-    const loadFloorPolygons = async () => {
-      if (selectedBuildingId) {
-        try {
-          const data = await fetchFloorPolygons(selectedFloor, selectedBuildingId);
-          setFloorPolygons(data);
-        } catch (error) {
-          console.error('층 폴리곤 불러오기 실패:', error);
-        }
-      }
-    };
-    loadFloorPolygons();
-  }, [selectedBuildingId, selectedFloor]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -246,25 +231,6 @@ const StartScreen = () => {
           />
         )}
         
-        {/* 층 폴리곤 */}
-        {FloorPolygons.map((feature, index) => {
-          try {
-            const geojson = JSON.parse(feature.geom_json);
-            const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
-            return polygons.map((polygon, i) => (
-              <Polygon
-                key={`floor-${index}-${i}`}
-                coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
-                fillColor="rgba(0, 255, 0, 0.3)"
-                strokeColor="black"
-                strokeWidth={2}
-              />
-            ));
-          } catch {
-            return null;
-          }
-        })}   
-
         {buildingPolygons.map((feature) => {
           try {
             const geojson = JSON.parse(feature.geom_json);
@@ -337,15 +303,6 @@ const StartScreen = () => {
           <Polyline key={p.id} coordinates={p.coordinates} strokeColor="blue" strokeWidth={4} />
         ))}
       </MapView>
-        {/* 얘는 absolute로 위에 뜸 */}
-  {selectedBuildingId !== null && (
-    <View style={styles.floorSelectorWrapper}>
-      <FloorSelector
-        selectedFloor={selectedFloor}
-        setSelectedFloor={setSelectedFloor}
-      />
-    </View>
-  )}
       {filtered.length > 0 && (
         <FlatList
           data={filtered}
@@ -423,12 +380,6 @@ const styles = StyleSheet.create({
     height: 40, backgroundColor: 'white', borderRadius: 10,
     paddingHorizontal: 10, zIndex: 10, elevation: 5,
   },
-  floorSelectorWrapper: {
-    position: 'absolute',
-    top: 100,  // 원하시는 위치 조절
-    right: 10,
-    zIndex: 100,  // 다른 View보다 위에 올라오게!
-  },  
   fixedRouteBox: {
     position: 'absolute', top: 70, left: 10, right: 10,
     height: 40, backgroundColor: 'white', borderRadius: 10,
