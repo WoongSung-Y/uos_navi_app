@@ -1,50 +1,90 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState} from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { fetchBuildingPolygons  } from '../services/api';
 
-const FloorSelector = ({ selectedFloor, setSelectedFloor }: any) => {
+const FloorSelector = ({ selectedFloor, setSelectedFloor, selectedBuildingId }: any) => {
+  const [floors, setFloors] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadFloors = async () => {
+      const buildings = await fetchBuildingPolygons();
+      const target = buildings.find((b: any) => b.id === selectedBuildingId);
+      if (target) {
+        const range = Array.from(
+          { length: target.max_floor - target.min_floor + 1 },
+          (_, i) => (target.min_floor + i).toString()
+        );
+        setFloors(range);
+      }
+    };
+
+    if (selectedBuildingId) {
+      loadFloors();
+    }
+  }, [selectedBuildingId]);
+    const listRef = useRef(null);
+
+    useEffect(() => {
+      const index = floors.findIndex(f => f === selectedFloor);
+      if (index !== -1 && listRef.current) {
+        listRef.current.scrollToIndex({
+          index: Math.max(index - 1, 0),
+          animated: true,
+          viewPosition: 0.5,
+        });
+      }
+    }, [selectedFloor, floors]);
+
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>층 선택</Text>
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.buttons}
-        showsVerticalScrollIndicator={false}
+      <FlatList
+  ref={listRef}
+  data={floors}
+  keyExtractor={(item) => item}
+  showsVerticalScrollIndicator={false}
+  style={styles.scrollContainer}
+  contentContainerStyle={styles.buttons}
+  getItemLayout={(data, index) => ({
+    length: 56,
+    offset: 56 * index,
+    index,
+  })}
+  renderItem={({ item }) => (
+    <TouchableOpacity
+      style={[
+        styles.button,
+        selectedFloor === item && styles.selectedButton,
+      ]}
+      onPress={() => setSelectedFloor(item)}
+    >
+      <Text
+        style={[
+          styles.buttonText,
+          selectedFloor === item && styles.selectedButtonText,
+        ]}
       >
-        {['1', '2', '3', '4', '5', '6'].map((floor) => (
-          <TouchableOpacity
-            key={floor}
-            style={[
-              styles.button,
-              selectedFloor === floor && styles.selectedButton,
-            ]}
-            onPress={() => setSelectedFloor(floor)}
-          >
-            <Text
-              style={[
-                styles.buttonText,
-                selectedFloor === floor && styles.selectedButtonText,
-              ]}
-            >
-              {floor}층
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+        {item}층
+      </Text>
+    </TouchableOpacity>
+  )}
+/>
+
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {  
-    alignSelf: 'flex-end', // 오른쪽 정렬
+  container: {
+    alignSelf: 'flex-end',
     marginRight: 10,
+    right: -10,
     marginTop: 10,
     backgroundColor: 'white',
-    padding: 10,
+    padding: 8,
     borderRadius: 15,
     elevation: 5,
     maxHeight: 220,
-    top: 0,
+    top: '40%',
   },
   text: {
     fontSize: 16,
@@ -78,5 +118,6 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 });
+
 
 export default FloorSelector;

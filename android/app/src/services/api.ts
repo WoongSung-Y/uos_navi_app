@@ -14,6 +14,28 @@ const handleError = (error: unknown) => {
   throw new Error('Unknown API error');
 };
 
+// 이미지 업로드
+export const uploadImageToServer = async (uri: string, fileName: string) => {
+  const formData = new FormData();
+  formData.append('image', {
+    uri,
+    type: 'image/jpeg',
+    name: fileName,
+  } as any); // RN 환경에서는 타입 충돌 있을 수 있으므로 any 처리
+
+  try {
+    const response = await apiClient.post('/upload_image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } catch (err) {
+    console.error('이미지 업로드 실패:', err);
+    return null;
+  }
+};
+
 // POI 불러오기
 export const fetchPOINodes = async (): Promise<Node[]> => {
   try {

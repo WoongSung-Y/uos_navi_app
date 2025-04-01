@@ -231,6 +231,7 @@ const StartScreen = () => {
         <FloorSelector
           selectedFloor={selectedFloor}
           setSelectedFloor={setSelectedFloor}
+          selectedBuildingId={selectedBuildingId}
         />
       )}
 

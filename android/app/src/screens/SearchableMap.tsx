@@ -26,6 +26,18 @@ import {
 import FloorSelector from '../components/FloorSelector';
 import { findNearestNode } from '../utils/findNearestNode';
 import type { Node, Coordinate, Building } from '../types/types';
+const floorColors = {
+  '-1': 'cyan',
+  '1': 'blue',
+  '2': 'green',
+  '3': 'orange',
+  '4': 'purple',
+  '5': 'red',
+  '6': 'yellow',
+  '7': 'pink',
+  '야외': 'gray',
+  default: 'gray',
+};
 
 const StartScreen = () => {
   const [FloorPolygons, setFloorPolygons] = useState([]);
@@ -36,7 +48,7 @@ const StartScreen = () => {
   const [allNodes, setAllNodes] = useState<Node[]>([]);
   const [fromNode, setFromNode] = useState<Node | null>(null);
   const [toNode, setToNode] = useState<Node | null>(null);
-  const [path, setPath] = useState<{ id: string, coordinates: Coordinate[] }[]>([]);
+  const [path, setPath] = useState<{ id: string, coordinates: Coordinate[], floor?: string }[]>([]);
   const [nodeImageIds, setNodeImageIds] = useState<string[]>([]);
   const [totalDistance, setTotalDistance] = useState<number | null>(null);
   const [search, setSearch] = useState('');
@@ -66,7 +78,6 @@ const StartScreen = () => {
     }
   ];
 
-  
   useEffect(() => {
     const loadFloorPolygons = async () => {
       if (selectedBuildingId) {
@@ -156,10 +167,17 @@ const StartScreen = () => {
         return;
       }
       const edgeCoords = await fetchEdgeCoordinates(edgeIds);
-      const convertedEdges = edgeCoords.map((edge) => ({
-        id: edge.id,
-        coordinates: edge.coordinates.map(([lng, lat]) => ({ latitude: lat, longitude: lng }))
-      }));
+      const convertedEdges = edgeCoords.map((edge) => {
+        const matchedNode = pathNodes.find(p => String(p.edge) === String(edge.id));
+        return {
+          id: edge.id,
+          coordinates: edge.coordinates.map(([lng, lat]) => ({ latitude: lat, longitude: lng })),
+          nodeid: matchedNode?.node,
+          floor: edge.floor?.toString(),
+          buildname : edge?.buildname,
+        };
+      });
+      console.log(convertedEdges);
       setPath(convertedEdges);
       setTotalDistance(pathNodes[pathNodes.length - 1]?.agg_cost || 0);
       const nodeImageIds = pathNodes
@@ -201,6 +219,7 @@ const StartScreen = () => {
     else setToNode(nearest);
     setShowMenu(false);
   };
+  
 
   return (
     <View style={styles.container}>
@@ -333,9 +352,15 @@ const StartScreen = () => {
             <Callout><Text>도착지</Text></Callout>
           </Marker>
         )}
-        {path.length > 0 && path.map(p => (
-          <Polyline key={p.id} coordinates={p.coordinates} strokeColor="blue" strokeWidth={4} />
-        ))}
+{path.length > 0 && path.map(p => (
+  <Polyline
+    key={p.id}
+    coordinates={p.coordinates}
+    strokeColor={floorColors[p.floor?.toString()] || floorColors.default}
+    strokeWidth={4}
+  />
+))}
+
       </MapView>
         {/* 얘는 absolute로 위에 뜸 */}
   {selectedBuildingId !== null && (
@@ -343,6 +368,7 @@ const StartScreen = () => {
       <FloorSelector
         selectedFloor={selectedFloor}
         setSelectedFloor={setSelectedFloor}
+        selectedBuildingId={selectedBuildingId}
       />
     </View>
   )}
@@ -388,13 +414,30 @@ const StartScreen = () => {
       {path.length > 0 && totalDistance !== null && (
         <View style={styles.summaryContainer}>
           <Text style={styles.summaryText}>총 거리: {totalDistance.toFixed(1)} m</Text>
+
+          <View style={styles.floorSummaryContainer}>
+            {Object.entries(
+              path.reduce((acc, cur) => {
+                const f = cur.floor || '야외';
+                acc[f] = true;
+                return acc;
+              }, {} as Record<string, boolean>)
+            ).map(([floor]) => (
+              <View key={floor} style={styles.floorRow}>
+                <Text style={styles.floorLabel}>{floor === '야외' ? '야외' : `${floor}층`}</Text>
+                <View style={[styles.colorBar, { backgroundColor: floorColors[floor] || floorColors.default }]} />
+              </View>
+            ))}
+          </View>
+
           <TouchableOpacity
             style={styles.navigateButton}
             onPress={() => navigation.navigate('Route', { path, nodeImageIds })}>
             <Text style={styles.navigateButtonText}>길찾기 시작</Text>
           </TouchableOpacity>
         </View>
-      )}
+)}
+
       {showMenu && longPressCoord && (
         <View style={styles.menuContainer}>
           <TouchableOpacity style={styles.menuButton} onPress={() => handleSetPoint('from')}>
@@ -418,6 +461,26 @@ export default StartScreen;
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { ...StyleSheet.absoluteFillObject },
+  floorSummaryContainer: {
+    width: '100%',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  floorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  floorLabel: {
+    width: 50,
+    fontSize: 14,
+    color: '#333',
+  },
+  colorBar: {
+    height: 10,
+    flex: 1,
+    borderRadius: 4,
+  },
   searchInput: {
     position: 'absolute', top: 20, left: 10, right: 10,
     height: 40, backgroundColor: 'white', borderRadius: 10,
@@ -465,5 +528,7 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
   button: { backgroundColor: '#2ab', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20 },
   buttonText: { color: 'white', fontWeight: 'bold' },
-  detailText: { fontSize: 14, marginVertical: 2 }
+  detailText: { fontSize: 14, marginVertical: 2 },
+
+  
 });
