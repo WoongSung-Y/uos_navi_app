@@ -1,4 +1,3 @@
-//반짝반짝 내 입술 바라보지망~
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -40,6 +39,20 @@ const floorColors = {
   default: 'gray',
 };
 
+// Haversine 공식을 이용한 거리 계산 함수
+const calculateDistance = (coord1: Coordinate, coord2: Coordinate) => {
+  const R = 6371000; // 지구 반지름 (미터)
+  const dLat = (coord2.latitude - coord1.latitude) * Math.PI / 180;
+  const dLon = (coord2.longitude - coord1.longitude) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(coord1.latitude * Math.PI / 180) * 
+    Math.cos(coord2.latitude * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
 const StartScreen = () => {
   const [FloorPolygons, setFloorPolygons] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState<string>('1');
@@ -62,6 +75,7 @@ const StartScreen = () => {
   const [longPressCoord, setLongPressCoord] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showPathDetails, setShowPathDetails] = useState(false);
+  const [floorDistances, setFloorDistances] = useState<Record<string, number>>({});
 
   const mapStyle = [
     { elementType: "labels", stylers: [{ visibility: "off" }] },
@@ -69,7 +83,6 @@ const StartScreen = () => {
     { featureType: "transit", stylers: [{ visibility: "on" }] }
   ];
 
-  // 출발지/목적지 설정 핸들러 (검색 결과 자동 닫힘)
   const handleSetFromNode = (node: Node | null) => {
     setFromNode(node);
     setFiltered([]);
@@ -168,40 +181,61 @@ const StartScreen = () => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    const drawPath = async () => {
-      if (!fromNode || !toNode || fromNode.node_id === toNode.node_id) return;
-      
-      try {
-        const pathNodes = await fetchShortestPath(fromNode.node_id, toNode.node_id);
-        const edgeIds = pathNodes.map(node => node.edge).filter(e => e !== '-1');
-        if (edgeIds.length === 0) {
-          setPath([]);
-          setTotalDistance(null);
-          return;
-        }
+  const drawPath = async () => {
+    if (!fromNode || !toNode || fromNode.node_id === toNode.node_id) return;
 
-        const edgeCoords = await fetchEdgeCoordinates(edgeIds);
-        const convertedEdges = edgeCoords.map((edge) => {
-          const matchedNode = pathNodes.find(p => String(p.edge) === String(edge.id));
-          return {
-            id: edge.id,
-            coordinates: edge.coordinates.map(([lng, lat]) => ({ latitude: lat, longitude: lng })),
-            nodeid: matchedNode?.node,
-            floor: edge.floor?.toString(),
-            buildname: edge?.buildname,
-          };
-        });
-
-        setPath(convertedEdges);
-        setTotalDistance(pathNodes[pathNodes.length - 1]?.agg_cost || 0);
-        setNodeImageIds(pathNodes.filter(p => p.edge !== '-1').map(p => `${p.edge}_${p.node}`));
-      } catch (error) {
-        console.error('경로 계산 실패:', error);
+    try {
+      const pathNodes = await fetchShortestPath(fromNode.node_id, toNode.node_id);
+      const edgeIds = pathNodes.map(node => node.edge).filter(e => e !== '-1');
+      if (edgeIds.length === 0) {
         setPath([]);
         setTotalDistance(null);
+        setFloorDistances({});
+        return;
       }
-    };
+
+      const edgeCoords = await fetchEdgeCoordinates(edgeIds);
+      const convertedEdges = edgeCoords.map((edge) => {
+        const matchedNode = pathNodes.find(p => String(p.edge) === String(edge.id));
+        return {
+          id: edge.id,
+          coordinates: edge.coordinates.map(([lng, lat]) => ({ latitude: lat, longitude: lng })),
+          nodeid: matchedNode?.node,
+          floor: edge.floor?.toString(),
+          buildname: edge?.buildname,
+        };
+      });
+
+      setPath(convertedEdges);
+      setTotalDistance(pathNodes[pathNodes.length - 1]?.agg_cost || 0);
+      setNodeImageIds(pathNodes.filter(p => p.edge !== '-1').map(p => `${p.edge}_${p.node}`));
+
+      // 층별 거리 계산 (개선된 버전)
+      const distances: Record<string, number> = {};
+      
+      convertedEdges.forEach((edge) => {
+        const floor = edge.floor || '야외';
+        
+        // 각 edge의 시작점과 끝점으로 거리 계산
+        if (edge.coordinates.length >= 2) {
+          const start = edge.coordinates[0];
+          const end = edge.coordinates[edge.coordinates.length - 1];
+          const edgeDistance = calculateDistance(start, end);
+          
+          distances[floor] = (distances[floor] || 0) + edgeDistance;
+        }
+      });
+
+      setFloorDistances(distances);
+    } catch (error) {
+      console.error('경로 계산 실패:', error);
+      setPath([]);
+      setTotalDistance(null);
+      setFloorDistances({});
+    }
+  };
+
+  useEffect(() => {
     drawPath();
   }, [fromNode, toNode]);
 
@@ -266,18 +300,15 @@ const StartScreen = () => {
         </View>
       )}
 
-      {/* 출발지/목적지 설정 시 동시에 표시되는 버튼들 */}
       {(fromNode && toNode) && (
         <View style={styles.actionButtonsContainer}>
-          {/* 길찾기 시작 버튼 (항상 보임) */}
           <TouchableOpacity
             style={[styles.actionButton, styles.navigateButton]}
             onPress={() => navigation.navigate('Route', { path, nodeImageIds })}
           >
-            <Text style={styles.navigateButtonText}>길찾기 시작</Text>
+            <Text style={styles.navigateButtonText}>길안내 시작</Text>
           </TouchableOpacity>
 
-          {/* 경로 상세정보 버튼 */}
           <TouchableOpacity
             style={[styles.actionButton, styles.detailButton]}
             onPress={() => setShowPathDetails(!showPathDetails)}
@@ -289,24 +320,32 @@ const StartScreen = () => {
         </View>
       )}
 
-      {/* 경로 상세정보 팝업 */}
       {showPathDetails && path.length > 0 && totalDistance !== null && (
         <View style={styles.summaryContainer}>
-          <Text style={styles.summaryText}>총 거리: {totalDistance.toFixed(1)} m</Text>
+          <Text style={styles.summaryText}>
+            총 거리: {totalDistance > 1000 
+              ? `${(totalDistance/1000).toFixed(1)} km` 
+              : `${totalDistance.toFixed(1)} m`}
+          </Text>
           <View style={styles.floorSummaryContainer}>
-            {Object.entries(
-              path.reduce((acc, cur) => {
-                const f = cur.floor || '야외';
-                acc[f] = true;
-                return acc;
-              }, {} as Record<string, boolean>)
-            ).map(([floor]) => (
+            {Object.entries(floorDistances).map(([floor, distance]) => (
               <View key={floor} style={styles.floorRow}>
-                <Text style={styles.floorLabel}>{floor === '야외' ? '야외' : `${floor}층`}</Text>
+                <Text style={styles.floorLabel}>
+                  {floor === '야외' ? '야외' : `${floor}층`}
+                </Text>
+                <Text style={styles.floorDistance}>
+                  {distance > 1000 
+                    ? `${(distance/1000).toFixed(1)} km` 
+                    : `${distance.toFixed(1)} m`}
+                  ({Math.round((distance/totalDistance)*100)}%)
+                </Text>
                 <View style={[
                   styles.colorBar, 
-                  { backgroundColor: floorColors[floor] || floorColors.default }
-                ]}/>
+                  { 
+                    backgroundColor: floorColors[floor] || floorColors.default,
+                    width: `${(distance/totalDistance)*100}%`
+                  }
+                ]} />
               </View>
             ))}
           </View>
@@ -484,7 +523,6 @@ export default StartScreen;
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { ...StyleSheet.absoluteFillObject },
-
   floorSummaryContainer: {
     width: '100%',
     marginTop: 10,
@@ -515,10 +553,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
+  floorDistance: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 10,
+    flex: 1,
+  },
   colorBar: {
     height: 10,
-    flex: 1,
     borderRadius: 4,
+    marginLeft: 10,
   },
   searchInput: {
     position: 'absolute',
@@ -601,11 +645,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     elevation: 10,
     zIndex: 100,
-    alignItems: 'center',
   },
   summaryText: {
     fontSize: 16,
     marginBottom: 10,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   actionButtonsContainer: {
     position: 'absolute',
@@ -622,11 +667,9 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     elevation: 5,
   },
-  //길찾기 시작 버튼
   navigateButton: {
     backgroundColor: '#9BCBEB',
   },
-  // 상세정보 보기 버튼
   detailButton: {
     left: 13,
     backgroundColor: '#9BCBEB',
@@ -692,4 +735,3 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 });
-
