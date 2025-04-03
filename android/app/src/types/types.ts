@@ -3,6 +3,11 @@ export type Coordinate = {
     latitude: number;
     longitude: number;
   };
+export  type RealViewNode = {
+    realview: boolean;
+    nodeLatitude: number;
+    nodeLongitude: number;
+  };
   
   export type Building = {
     id: number;

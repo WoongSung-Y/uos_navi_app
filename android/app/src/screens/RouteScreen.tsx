@@ -1,5 +1,4 @@
-// 틀릴리가 없다
-// 틀리면 기필코 자살할 것
+// 나는 최강이다!
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -15,7 +14,9 @@ import MapView, { Polyline, Circle, Polygon} from 'react-native-maps';
 import { useRoute } from '@react-navigation/native';
 import { fetchBuildingPolygons, fetchFloorPolygons, uploadImageToServer, fetchNodes  } from '../services/api';
 import FloorSelector from '../components/FloorSelector';
-// import { launchCamera } from 'react-native-image-picker';
+import { launchCamera } from 'react-native-image-picker';
+import IndoorLocateButton from '../components/IndoorLocateButton';
+
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
@@ -49,7 +50,7 @@ const getDistanceInMeters = (coord1, coord2) => {
 
 const RouteScreen = () => {
   const route = useRoute();
-  const { path, nodeImageIds } = route.params;
+  const { path, nodeImageIds, realviewNode } = route.params;
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -60,6 +61,7 @@ const RouteScreen = () => {
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
   const [buildingPolygons, setBuildingPolygons] = useState([]);
   const [showFloorSelector, setShowFloorSelector] = useState(false);
+  const [doortype, setDoortype] = useState<string>('indoor');
 
   const flatListRef = useRef(null);
   const mapRef = useRef(null);
@@ -101,11 +103,11 @@ const RouteScreen = () => {
     if (!granted) return;
 
     
-    // const result = await launchCamera({
-    //   mediaType: 'photo',
-    //   cameraType: 'back',
-    //   quality: 0.8,
-    // });
+    const result = await launchCamera({
+      mediaType: 'photo',
+      cameraType: 'back',
+      quality: 0.8,
+    });
   
     if (result.didCancel || !result.assets || !result.assets[0]?.uri) {
       console.warn('사진 촬영 취소 또는 실패');
@@ -114,7 +116,7 @@ const RouteScreen = () => {
     }
   
     const uri = result.assets[0].uri;
-    const currentEdge = path[currentIndex];
+    const currentEdge = realviewNode[currentIndex];
   
     if (!currentEdge?.id || !currentEdge?.nodeid) {
       console.warn('경로 정보 없음');
@@ -134,15 +136,16 @@ const RouteScreen = () => {
   };
 
   useEffect(() => {
-    if (path.length > 0 && path[0].floor) {
-      setSelectedFloor(path[0].floor.toString());
+    if (realviewNode.length > 0 && realviewNode[currentIndex].floor) {
+      setSelectedFloor(realviewNode[currentIndex].floor.toString());
       setShowFloorSelector(true);
     }
-  }, [path]);
+    console.log(selectedFloor)
+  }, [currentIndex]);
 
   
   useEffect(() => {
-    const currentFloor = path[currentIndex]?.floor;
+    const currentFloor = realviewNode[currentIndex]?.floor;
     if (currentFloor) {
       setSelectedFloor(currentFloor.toString());
       setShowFloorSelector(true);
@@ -178,17 +181,17 @@ useEffect(() => {
     setBuildingPolygons(buildings);
 
     // ⬇️ 여기서 바로 building id 설정
-    if (path.length > 0 && path[0].buildname) {
-      const target = buildings.find(b => b.build_name === path[0].buildname);
+    if (realviewNode.length > 0 && realviewNode[currentIndex].buildname) {
+      const target = buildings.find(b => b.build_name === realviewNode[currentIndex].buildname);
       if (target) setSelectedBuildingId(target.id);
     }
   };
   loadData();
-}, []);
+}, [currentIndex]);
 
 useEffect(() => {
-  if (path.length === 0 || !path[currentIndex]?.buildname) return;
-  const currentBuildName = path[currentIndex].buildname;
+  if (realviewNode.length === 0 || !realviewNode[currentIndex]?.buildname) return;
+  const currentBuildName = realviewNode[currentIndex].buildname;
 
   const match = buildingPolygons.find(
     (b) => b.build_name === currentBuildName
@@ -217,19 +220,15 @@ useEffect(() => {
   }, [currentLocation]);
 
   useEffect(() => {
-    const currentEdge = path[currentIndex];
-    if (currentEdge) {
-      const node = nodes.find(n => n.node_id === currentEdge.nodeid);
-      if (node) {
-        mapRef.current?.animateToRegion({
-          latitude: node.latitude,
-          longitude: node.longitude,
-          latitudeDelta: 0.0004,
-          longitudeDelta: 0.0004
+    const currentnode = realviewNode[currentIndex];
+
+      mapRef.current?.animateToRegion({
+      latitude: currentnode.nodeLatitude,
+      longitude: currentnode.nodeLongitude,
+      latitudeDelta: 0.0001,
+      longitudeDelta: 0.0001
         });
-      }
-    }
-  }, [currentIndex]);
+    }, [currentIndex]);
   
 
   return (
@@ -255,8 +254,6 @@ useEffect(() => {
 
         {buildingPolygons.map((feature) => {
           try {
-            
-
             const geojson = JSON.parse(feature.geom_json);
             const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
             return polygons.map((polygon, i) => (
@@ -275,30 +272,29 @@ useEffect(() => {
           }
         })}
 
-{path.map((edge, i) => {
-  const node = nodes.find(n => n.node_id === edge.nodeid);
-  if (!selectedFloor || edge.floor?.toString() === selectedFloor) {
-    if (!node) return null; // node 없으면 skip
-    return (
-      <Circle
-        key={`circle-${edge.id}`}
-        center={{ latitude: node.latitude, longitude: node.longitude }}
-        radius={.5}
-        strokeColor={i === currentIndex ? 'cyan' : 'gray'}
-        fillColor={i === currentIndex ? 'cyan' : 'gray'}
-        onPress={() => {
-          setCurrentIndex(i);
-          mapRef.current?.animateToRegion({
-            latitude: node.latitude,
-            longitude: node.longitude,
-            latitudeDelta: 0.0004,
-            longitudeDelta: 0.0004,
-          });
-        }}      />
-    );
-  }
-  return null;
-})}
+{realviewNode
+  .filter(node => (node.floor ?? null) === (selectedFloor ?? null))
+  .map((node, i) => (
+    <Circle
+      key={`realview-node-${i}`}
+      center={{ latitude: node.nodeLatitude, longitude: node.nodeLongitude }}
+      radius={0.5}
+      strokeColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
+      fillColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
+      onPress={() => {
+        setCurrentIndex(i);
+        mapRef.current?.animateToRegion({
+          latitude: node.nodeLatitude,
+          longitude: node.nodeLongitude,
+          latitudeDelta: 0.0004,
+          longitudeDelta: 0.0004,
+        });
+      }}
+    />
+))}
+
+
+
 
 
         {currentLocation && !isIndoor && currentAccuracy && (
@@ -344,30 +340,36 @@ useEffect(() => {
 
       <View style={styles.imageListContainer}>
         
-        <FlatList
-          ref={flatListRef}
-          data={nodeImageIds}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={true}
-          keyExtractor={(item) => item}
-          onMomentumScrollEnd={(e) => {
-            const index = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-            setCurrentIndex(index);
-          }}
-          renderItem={({ item }) => (
-            <Image
-              source={{ uri: `http://15.165.159.29:3000/images/${item}.jpg` }}
-              style={[styles.image, { width: screenWidth - 20 }]}
-              resizeMode="contain"
-            />
-          )}
-        />
+      <FlatList
+  ref={flatListRef}
+  data={realviewNode}
+  horizontal
+  pagingEnabled
+  showsHorizontalScrollIndicator={true}
+  keyExtractor={(item, index) => `${item.nodeLatitude}-${item.nodeLongitude}-${index}`}
+  onMomentumScrollEnd={(e) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+    setCurrentIndex(index);
+  }}
+  renderItem={({ item }) => (
+    <Image
+      source={{ uri: `http://15.165.159.29:3000/images/${item.imageName}.jpg` }} // ← imageName이 있어야 해
+      style={[styles.image, { width: screenWidth - 20 }]}
+      resizeMode="contain"
+    />
+  )}
+/>
+
       </View>
       
-      <View style={styles.buttonWrapper}>
-  <Button title="📸" onPress={handleTakePhoto} />
-</View>
+    <View style={styles.buttonWrapper}>
+      <Button title="📸" onPress={handleTakePhoto} />
+    </View>
+
+    <View style={styles.indoorButtonWrapper}>
+  <IndoorLocateButton doortype={doortype} />
+    </View>
+
     </View>
 
     
@@ -406,6 +408,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     borderRadius: 10,
+  },
+  indoorButtonWrapper: {
+    position: 'absolute',
+    bottom: -70,
+    left: 50,
+    zIndex: 1999,
   },
   
 });

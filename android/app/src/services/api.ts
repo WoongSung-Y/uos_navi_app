@@ -14,6 +14,32 @@ const handleError = (error: unknown) => {
   throw new Error('Unknown API error');
 };
 
+
+export const uploadIndoorPhoto = async (uri: string, fileName: string, pressure: number | null) => {
+  const formData = new FormData();
+  formData.append('image', {
+    uri,
+    type: 'image/jpeg',
+    name: fileName,
+  } as any);
+
+  // 🔥 기압도 같이 전송 (null이면 빈 문자열)
+  formData.append('pressure', pressure?.toString() ?? '');
+
+  try {
+    const response = await apiClient.post('/api/indoor_upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } catch (err) {
+    console.error('Indoor 사진 업로드 실패:', err);
+    return null;
+  }
+};
+
+
 // 이미지 업로드
 export const uploadImageToServer = async (uri: string, fileName: string) => {
   const formData = new FormData();
@@ -24,7 +50,7 @@ export const uploadImageToServer = async (uri: string, fileName: string) => {
   } as any); // RN 환경에서는 타입 충돌 있을 수 있으므로 any 처리
 
   try {
-    const response = await apiClient.post('/upload_image', formData, {
+    const response = await apiClient.post('/api/upload_image', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
