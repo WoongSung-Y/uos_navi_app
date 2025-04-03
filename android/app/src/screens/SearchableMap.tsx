@@ -1,3 +1,4 @@
+// 검색화면 -> POI 데이터 기반
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -62,7 +63,7 @@ const StartScreen = () => {
   const [allNodes, setAllNodes] = useState<Node[]>([]);
   const [fromNode, setFromNode] = useState<Node | null>(null);
   const [toNode, setToNode] = useState<Node | null>(null);
-  const [path, setPath] = useState<{ id: string, coordinates: Coordinate[], floor?: string }[]>([]);
+  const [path, setPath] = useState<{ id: string, coordinates: Coordinate[], floor?: string, buildname?: string }[]>([]);
   const [nodeImageIds, setNodeImageIds] = useState<string[]>([]);
   const [totalDistance, setTotalDistance] = useState<number | null>(null);
   const [search, setSearch] = useState('');
@@ -75,7 +76,7 @@ const StartScreen = () => {
   const [longPressCoord, setLongPressCoord] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showPathDetails, setShowPathDetails] = useState(false);
-  const [floorDistances, setFloorDistances] = useState<Record<string, number>>({});
+  const [pathSequence, setPathSequence] = useState<Array<{floor: string, buildname: string, distance: number}>>([]);
 
   const mapStyle = [
     { elementType: "labels", stylers: [{ visibility: "off" }] },
@@ -182,7 +183,12 @@ const StartScreen = () => {
   }, []);
 
   const drawPath = async () => {
-    if (!fromNode || !toNode || fromNode.node_id === toNode.node_id) return;
+    if (!fromNode || !toNode || fromNode.node_id === toNode.node_id) {
+      setPath([]);
+      setTotalDistance(null);
+      setPathSequence([]);
+      return;
+    }
 
     try {
       const pathNodes = await fetchShortestPath(fromNode.node_id, toNode.node_id);
@@ -190,7 +196,7 @@ const StartScreen = () => {
       if (edgeIds.length === 0) {
         setPath([]);
         setTotalDistance(null);
-        setFloorDistances({});
+        setPathSequence([]);
         return;
       }
 
@@ -202,7 +208,7 @@ const StartScreen = () => {
           coordinates: edge.coordinates.map(([lng, lat]) => ({ latitude: lat, longitude: lng })),
           nodeid: matchedNode?.node,
           floor: edge.floor?.toString(),
-          buildname: edge?.buildname,
+          buildname: edge.buildname,
         };
       });
 
@@ -210,28 +216,52 @@ const StartScreen = () => {
       setTotalDistance(pathNodes[pathNodes.length - 1]?.agg_cost || 0);
       setNodeImageIds(pathNodes.filter(p => p.edge !== '-1').map(p => `${p.edge}_${p.node}`));
 
-      // 층별 거리 계산 (개선된 버전)
-      const distances: Record<string, number> = {};
-      
+      // 경로 순서 계산
+      const sequence: Array<{floor: string, buildname: string, distance: number}> = [];
+      let currentFloor = convertedEdges[0]?.floor || '야외';
+      let currentBuildname = convertedEdges[0]?.buildname || '';
+      let accumulatedDistance = 0;
+
       convertedEdges.forEach((edge) => {
-        const floor = edge.floor || '야외';
+        const edgeFloor = edge.floor || '야외';
+        const edgeBuildname = edge.buildname || '';
         
-        // 각 edge의 시작점과 끝점으로 거리 계산
         if (edge.coordinates.length >= 2) {
           const start = edge.coordinates[0];
           const end = edge.coordinates[edge.coordinates.length - 1];
           const edgeDistance = calculateDistance(start, end);
           
-          distances[floor] = (distances[floor] || 0) + edgeDistance;
+          // 층이나 건물이 변경된 경우
+          if (edgeFloor !== currentFloor || edgeBuildname !== currentBuildname) {
+            sequence.push({
+              floor: currentFloor,
+              buildname: currentBuildname,
+              distance: accumulatedDistance
+            });
+            accumulatedDistance = 0;
+            currentFloor = edgeFloor;
+            currentBuildname = edgeBuildname;
+          }
+          
+          accumulatedDistance += edgeDistance;
         }
       });
 
-      setFloorDistances(distances);
+      // 마지막 구간 추가
+      if (accumulatedDistance > 0) {
+        sequence.push({
+          floor: currentFloor,
+          buildname: currentBuildname,
+          distance: accumulatedDistance
+        });
+      }
+
+      setPathSequence(sequence);
     } catch (error) {
       console.error('경로 계산 실패:', error);
       setPath([]);
       setTotalDistance(null);
-      setFloorDistances({});
+      setPathSequence([]);
     }
   };
 
@@ -328,27 +358,26 @@ const StartScreen = () => {
               : `${totalDistance.toFixed(1)} m`}
           </Text>
           <View style={styles.floorSummaryContainer}>
-            {Object.entries(floorDistances).map(([floor, distance]) => (
-              <View key={floor} style={styles.floorRow}>
-                <Text style={styles.floorLabel}>
-                  {floor === '야외' ? '야외' : `${floor}층`}
-                </Text>
-                <Text style={styles.floorDistance}>
-                  {distance > 1000 
-                    ? `${(distance/1000).toFixed(1)} km` 
-                    : `${distance.toFixed(1)} m`}
-                  ({Math.round((distance/totalDistance)*100)}%)
-                </Text>
-                <View style={[
-                  styles.colorBar, 
-                  { 
-                    backgroundColor: floorColors[floor] || floorColors.default,
-                    width: `${(distance/totalDistance)*100}%`
-                  }
-                ]} />
-              </View>
-            ))}
-          </View>
+  {pathSequence.map((segment, index) => {
+    const floorColor = floorColors[segment.floor] || floorColors.default;
+    return (
+      <View key={`segment-${index}`} style={styles.segmentRow}>
+        <Text style={styles.segmentIndex}>{index + 1}.</Text>
+        <View style={[styles.colorIndicator, { backgroundColor: floorColor }]} />
+        <Text style={styles.segmentLabel}>
+          {segment.buildname && segment.buildname !== '야외' 
+            ? `${segment.buildname} ${segment.floor === '야외' ? '' : segment.floor + '층'}`
+            : '야외'}
+        </Text>
+        <Text style={styles.segmentDistance}>
+          {segment.distance > 1000 
+            ? `${(segment.distance/1000).toFixed(1)} km` 
+            : `${segment.distance.toFixed(1)} m`}
+        </Text>
+      </View>
+    );
+  })}
+</View>
         </View>
       )}
 
@@ -543,26 +572,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  floorRow: {
+  colorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 5,
+  },
+  segmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
   },
-  floorLabel: {
-    width: 50,
+  segmentIndex: {
+    width: 20,
     fontSize: 14,
     color: '#333',
   },
-  floorDistance: {
+  segmentLabel: {
+    flex: 2,
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 5,
+  },
+  segmentDistance: {
+    width: 70,
     fontSize: 14,
     color: '#333',
     marginLeft: 10,
-    flex: 1,
-  },
-  colorBar: {
-    height: 10,
-    borderRadius: 4,
-    marginLeft: 10,
+    textAlign: 'right',
   },
   searchInput: {
     position: 'absolute',
