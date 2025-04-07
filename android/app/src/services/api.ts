@@ -15,7 +15,13 @@ const handleError = (error: unknown) => {
 };
 
 
-export const uploadIndoorPhoto = async (uri: string, fileName: string, pressure: number | null) => {
+export const uploadIndoorPhoto = async (
+  uri: string,
+  fileName: string,
+  pressure: number | null,
+  reset = false,
+  currentFloor: number | null = null
+) => {
   const formData = new FormData();
   formData.append('image', {
     uri,
@@ -23,21 +29,50 @@ export const uploadIndoorPhoto = async (uri: string, fileName: string, pressure:
     name: fileName,
   } as any);
 
-  // 🔥 기압도 같이 전송 (null이면 빈 문자열)
   formData.append('pressure', pressure?.toString() ?? '');
+  formData.append('reset', reset ? 'true' : 'false');
+
+  if (reset && currentFloor !== null) {
+    formData.append('current_floor', currentFloor.toString());
+  }
+
+  console.log('[📤 fetch 업로드 시도]', {
+    uri,
+    fileName,
+    pressure,
+    reset,
+    currentFloor,
+  });
 
   try {
-    const response = await apiClient.post('/api/indoor_upload', formData, {
+    const response = await fetch('http://15.165.159.29:3000/api/indoor_upload', {
+      method: 'POST',
+      body: formData,
       headers: {
-        'Content-Type': 'multipart/form-data',
+        // 👇 명시적으로 설정하지 않음! fetch가 자동으로 multipart boundary 붙여줌
+        // 'Content-Type': 'multipart/form-data',
+        Accept: 'application/json',
       },
     });
-    return response.data;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ fetch 업로드 실패:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('[✅ fetch 업로드 성공]', data);
+    return data;
   } catch (err) {
-    console.error('Indoor 사진 업로드 실패:', err);
+    console.error('❌ fetch 예외 발생:', err);
     return null;
   }
 };
+
+
+
+
 
 
 // 이미지 업로드
@@ -55,6 +90,7 @@ export const uploadImageToServer = async (uri: string, fileName: string) => {
         'Content-Type': 'multipart/form-data',
       },
     });
+    console.log('이미지 업로드 성공:', response.data);
     return response.data;
   } catch (err) {
     console.error('이미지 업로드 실패:', err);
