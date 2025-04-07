@@ -119,6 +119,7 @@ const StartScreen = () => {
         <Marker
           key={node.node_id}
           coordinate={{ latitude: parseFloat(node.latitude), longitude: parseFloat(node.longitude) }}
+          pinColor="#9BCBEB"
         >
           <Callout><Text>{node.lect_num}</Text></Callout>
         </Marker>
@@ -133,7 +134,7 @@ const StartScreen = () => {
         <Marker
           key={node.node_id}
           coordinate={{ latitude: parseFloat(node.latitude), longitude: parseFloat(node.longitude) }}
-          pinColor="orange"
+          pinColor="#9BCBEB"
         >
           <Callout><Text>{node.lect_num}</Text></Callout>
         </Marker>
@@ -143,7 +144,7 @@ const StartScreen = () => {
   const renderNoticeMarker = () => {
     if (mode !== 'notice') return null;
     return (
-      <Marker coordinate={noticeMarker.coord} pinColor="red">
+      <Marker coordinate={noticeMarker.coord} pinColor="#9BCBEB">
         <Callout>
           <View style={styles.callout}>
             <Text style={styles.calloutTitle}>{noticeMarker.title}</Text>
@@ -351,7 +352,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eee', paddingVertical: 6,
     paddingHorizontal: 12, borderRadius: 20,
   },
-  selectedButton: { backgroundColor: '#00B398' },
+  selectedButton: { backgroundColor: '#9BCBEB' },
   categoryText: { fontWeight: 'bold', color: 'black' },
   bottomButtons: {
     position: 'absolute', bottom: 30, left: 20, right: 20,

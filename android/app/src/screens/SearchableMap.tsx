@@ -482,13 +482,13 @@ const StartScreen = () => {
 
         {fromNode && (
           <Marker coordinate={{ latitude: fromNode.latitude, longitude: fromNode.longitude }} pinColor="green">
-            <Callout><Text>출발지</Text></Callout>
+            <Callout><Text>출발</Text></Callout>
           </Marker>
         )}
 
         {toNode && (
           <Marker coordinate={{ latitude: toNode.latitude, longitude: toNode.longitude }} pinColor="red">
-            <Callout><Text>목적지</Text></Callout>
+            <Callout><Text>도착</Text></Callout>
           </Marker>
         )}
 
