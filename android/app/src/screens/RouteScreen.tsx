@@ -186,6 +186,7 @@ const RouteScreen = () => {
     if (match) setSelectedBuildingId(match.id);
   }, [currentIndex, buildingPolygons, path]);
 
+  // 5m 버퍼 안의 노드로 자동 전환
   useEffect(() => {
     if (!currentLocation || path.length === 0) return;
     for (let i = 0; i < path.length; i++) {
@@ -310,10 +311,13 @@ const RouteScreen = () => {
           />
         {feature.lect_num && mapZoomLevel < 0.003 && (
           <Marker coordinate={center}>
-            <Text style={{ fontSize: 6, fontWeight: 'bold' }}>
-             {extractRoomNumber(feature.lect_num)}
-            </Text>
-          </Marker>
+  <View style={styles.lectNumBadge}>
+    <Text style={styles.lectNumText}>
+      {extractRoomNumber(feature.lect_num)}
+    </Text>
+  </View>
+</Marker>
+
         )}
 
         </React.Fragment>
@@ -436,4 +440,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     lineHeight: 22,
   },
+  lectNumBadge: {
+    backgroundColor: '#9BCBEB',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 4, // Android용 그림자
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lectNumText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#333',
+  },  
 });
