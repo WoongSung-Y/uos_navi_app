@@ -308,7 +308,7 @@ const RouteScreen = () => {
             strokeColor="black"
             strokeWidth={2}
           />
-        {feature.lect_num && mapZoomLevel < 0.004 && (
+        {feature.lect_num && mapZoomLevel < 0.003 && (
           <Marker coordinate={center}>
             <Text style={{ fontSize: 6, fontWeight: 'bold' }}>
              {extractRoomNumber(feature.lect_num)}
