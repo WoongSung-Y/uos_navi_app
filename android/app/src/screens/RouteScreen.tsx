@@ -310,7 +310,7 @@ const RouteScreen = () => {
           />
         {feature.lect_num && mapZoomLevel < 0.004 && (
           <Marker coordinate={center}>
-            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>
+            <Text style={{ fontSize: 6, fontWeight: 'bold' }}>
              {extractRoomNumber(feature.lect_num)}
             </Text>
           </Marker>
