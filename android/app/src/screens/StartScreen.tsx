@@ -37,6 +37,7 @@ const StartScreen = () => {
   const [buildingPolygons, setBuildingPolygons] = useState<Building[]>([]);
   const [poiNodes, setPoiNodes] = useState<Node[]>([]);
   const [mode, setMode] = useState<'default' | 'settings' | 'restaurant' | 'notice'>('default');
+  const [mapZoomLevel, setMapZoomLevel] = useState<number>(0); // 줌 상태 추적
 
   const [userSettings, setUserSettings] = useState({
     elderly: false,
@@ -52,6 +53,11 @@ const StartScreen = () => {
     { featureType: "transit", stylers: [{ visibility: "on" }] },
   ];
 
+  const extractRoomNumber = (lectNum: string) => {
+    const match = lectNum.match(/(\d+호)/);
+    return match ? match[1] : lectNum;
+  };
+  
   const requestLocationPermission = async () => {
     if (Platform.OS === 'android') {
       const granted = await PermissionsAndroid.request(
@@ -104,7 +110,6 @@ const StartScreen = () => {
   useEffect(() => {
     fetchBuildingPolygons().then(setBuildingPolygons).catch(console.error);
     fetchPOINodes().then(setPoiNodes).catch(console.error);
-    //fetchFloorPolygons().then(setFloorPolygons).catch(console.error);
   }, []);
 
   const toggleSetting = (key: keyof typeof userSettings) => {
@@ -154,7 +159,6 @@ const StartScreen = () => {
       </Marker>
     );
   };
-
   return (
     <View style={styles.container}>
       <MapView
@@ -174,8 +178,10 @@ const StartScreen = () => {
           longitudeDelta: 0.007,
         }}
         onPress={() => setSelectedBuildingId(null)}
+        onRegionChangeComplete={(region) => {
+          setMapZoomLevel(region.latitudeDelta);
+        }}
       >
-        {/* 건물 폴리곤 */}
         {buildingPolygons.map((feature) => {
           try {
             const geojson = JSON.parse(feature.geom_json);
@@ -192,10 +198,7 @@ const StartScreen = () => {
                 strokeColor="transparent"
                 strokeWidth={0}
                 tappable={true}
-                onPress={() => {
-                  console.log('Building selected:', feature.id); // 추가
-                  setSelectedBuildingId(feature.id);
-                }}
+                onPress={() => setSelectedBuildingId(feature.id)}
               />
             ));
           } catch (err) {
@@ -204,20 +207,38 @@ const StartScreen = () => {
           }
         })}
 
-        {/* 층 폴리곤 */}
         {FloorPolygons.map((feature, index) => {
           try {
             const geojson = JSON.parse(feature.geom_json);
             const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
-            return polygons.map((polygon, i) => (
-              <Polygon
-                key={`floor-${index}-${i}`}
-                coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
-                fillColor="rgba(0, 255, 0, 0.3)"
-                strokeColor="black"
-                strokeWidth={2}
-              />
-            ));
+
+            return polygons.map((polygon, i) => {
+              const coords = polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
+              const latSum = coords.reduce((sum, c) => sum + c.latitude, 0);
+              const lngSum = coords.reduce((sum, c) => sum + c.longitude, 0);
+              const center = {
+                latitude: latSum / coords.length,
+                longitude: lngSum / coords.length,
+              };
+
+              return (
+                <React.Fragment key={`floor-${index}-${i}`}>
+                  <Polygon
+                    coordinates={coords}
+                    fillColor="rgba(0, 255, 0, 0.3)"
+                    strokeColor="black"
+                    strokeWidth={2}
+                  />
+                {feature.lect_num && mapZoomLevel < 0.004 && (
+                  <Marker coordinate={center}>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold' }}>
+                      {extractRoomNumber(feature.lect_num)}
+                    </Text>
+                  </Marker>
+                )}
+                </React.Fragment>
+              );
+            });
           } catch {
             return null;
           }

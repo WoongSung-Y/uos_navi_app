@@ -1,4 +1,4 @@
-// 나는 최강이다!
+
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -11,7 +11,7 @@ import {
   Platform,
   Text,
 } from 'react-native';
-import MapView, { Polyline, Circle, Polygon} from 'react-native-maps';
+import MapView, { Polyline, Circle, Polygon, Marker} from 'react-native-maps';
 import { useRoute } from '@react-navigation/native';
 import { fetchBuildingPolygons, fetchFloorPolygons, uploadImageToServer, fetchNodes  } from '../services/api';
 import FloorSelector from '../components/FloorSelector';
@@ -68,6 +68,8 @@ const RouteScreen = () => {
   const [PredictedFloorId,setPredictedFloorId] = useState<string | null>(null);
   const flatListRef = useRef(null);
   const mapRef = useRef(null);
+  const [mapZoomLevel, setMapZoomLevel] = useState(0);
+
 
   const mapStyle = [
     { elementType: "labels", stylers: [{ visibility: "off" }] },
@@ -88,6 +90,11 @@ const RouteScreen = () => {
       didInitMap.current = true;
     }
   }, [path]);
+
+  const extractRoomNumber = (lectNum: string) => {
+    const match = lectNum.match(/(\d+호)/);
+    return match ? match[1] : lectNum;
+  };  
 
   useEffect(() => {
     const loadNodes = async () => {
@@ -213,6 +220,7 @@ const RouteScreen = () => {
         showsUserLocation={false}
         showsBuildings={false}
         onPress={() => setSelectedBuildingId(null)}
+        onRegionChangeComplete={(region) => setMapZoomLevel(region.latitudeDelta)}
       >
         {path.map((edge) => (
           (!selectedFloor || edge.floor?.toString() === selectedFloor) && (
@@ -266,10 +274,6 @@ const RouteScreen = () => {
     />
 ))}
 
-
-
-
-
         {currentLocation && !isIndoor && currentAccuracy && (
           <Circle
             center={currentLocation}
@@ -283,22 +287,43 @@ const RouteScreen = () => {
         
         {/* 층 폴리곤 */}
         {FloorPolygons.map((feature, index) => {
-          try {
-            const geojson = JSON.parse(feature.geom_json);
-            const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
-            return polygons.map((polygon, i) => (
-              <Polygon
-                key={`floor-${index}-${i}`}
-                coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
-                fillColor="rgba(0, 255, 0, 0.3)"
-                strokeColor="black"
-                strokeWidth={2}
-              />
-            ));
-          } catch {
-            return null;
-          }
-        })}   
+  try {
+    const geojson = JSON.parse(feature.geom_json);
+    const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
+
+    return polygons.map((polygon, i) => {
+      const coords = polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
+      const latSum = coords.reduce((sum, c) => sum + c.latitude, 0);
+      const lngSum = coords.reduce((sum, c) => sum + c.longitude, 0);
+      const center = {
+        latitude: latSum / coords.length,
+        longitude: lngSum / coords.length,
+      };
+
+      return (
+        <React.Fragment key={`floor-${index}-${i}`}>
+          <Polygon
+            coordinates={coords}
+            fillColor="rgba(0, 255, 0, 0.3)"
+            strokeColor="black"
+            strokeWidth={2}
+          />
+        {feature.lect_num && mapZoomLevel < 0.004 && (
+          <Marker coordinate={center}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>
+             {extractRoomNumber(feature.lect_num)}
+            </Text>
+          </Marker>
+        )}
+
+        </React.Fragment>
+      );
+    });
+  } catch {
+    return null;
+  }
+})}
+  
       </MapView>
 
       {showFloorSelector && (

@@ -1,3 +1,5 @@
+// 응냐냐냐 위플래쉬 ~
+// 응 냐 응 냐 위플래쉬 ~
 import React, { useEffect } from 'react';
 import { View, Image, StyleSheet, Dimensions, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -8,7 +10,7 @@ const SplashScreen = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       navigation.replace('Start');
-    }, 2000);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [navigation]);
@@ -26,7 +28,7 @@ const SplashScreen = () => {
 };
 
 export default SplashScreen;
-
+// 위플래쉬 ㅋㅋ
 const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
