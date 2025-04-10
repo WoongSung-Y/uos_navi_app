@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   },
   floorSelectorWrapper: {
     position: 'absolute',
-    top: 130,
+    top: 210,
     right: 10,
     zIndex: 1000,
     elevation: 10,
