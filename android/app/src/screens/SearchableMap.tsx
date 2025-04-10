@@ -80,6 +80,7 @@ const StartScreen = () => {
   const [realviewNode, setRealViewNode] = useState([]);
   const [mapZoomLevel, setMapZoomLevel] = useState(0);
 
+
   const mapStyle = [
     { elementType: "labels", stylers: [{ visibility: "off" }] },
     { featureType: "poi", stylers: [{ visibility: "on" }] },
@@ -338,6 +339,14 @@ const StartScreen = () => {
     setShowMenu(false);
   };
 
+  const handleSwitchNodes = () => {
+    setFromNode(toNode);
+    setToNode(fromNode);
+  };
+  
+  /////////////////////////////////////////////////
+  /////////////////////////////////////////////////
+  // 렌더링
   return (
     <View style={styles.container}>
       <TextInput
@@ -350,73 +359,114 @@ const StartScreen = () => {
         }}
       />
 
-      {(fromNode || toNode) && (
-        <View style={styles.fixedRouteBox}>
-          <View style={styles.routeInfoContainer}>
-            <Text style={styles.routeText}>출발: {fromNode?.lect_num || '미지정'}</Text>
-            <Text style={styles.routeText}>도착: {toNode?.lect_num || '미지정'}</Text>
-          </View>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity onPress={() => handleSetFromNode(null)} style={styles.modifyButton}>
-              <Text style={styles.modifyButtonText}>출발지 수정</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleSetToNode(null)} style={styles.modifyButton}>
-              <Text style={styles.modifyButtonText}>도착지 수정</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+{(fromNode || toNode) && (
+  <View style={styles.routeCardBox}>
+    <TouchableOpacity onPress={handleSwitchNodes}>
+      <Text style={styles.switchIcon}>⇅</Text>
+    </TouchableOpacity>
 
-      {(fromNode && toNode) && (
-        <View style={styles.actionButtonsContainer}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.navigateButton]}
-            onPress={() => navigation.navigate('Route', { path, nodeImageIds, realviewNode })}
-          >
-            <Text style={styles.navigateButtonText}>길안내 시작</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.detailButton]}
-            onPress={() => setShowPathDetails(!showPathDetails)}
-          >
-            <Text style={styles.detailButtonText}>
-              {showPathDetails ? '상세정보 off' : '경로 상세정보'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {showPathDetails && path.length > 0 && totalDistance !== null && (
-        <View style={styles.summaryContainer}>
-          <Text style={styles.summaryText}>
-            총 거리: {totalDistance > 1000 
-              ? `${(totalDistance/1000).toFixed(1)} km` 
-              : `${totalDistance.toFixed(1)} m`}
-          </Text>
-          <View style={styles.floorSummaryContainer}>
-  {pathSequence.map((segment, index) => {
-    const floorColor = floorColors[segment.floor] || floorColors.default;
-    return (
-      <View key={`segment-${index}`} style={styles.segmentRow}>
-        <Text style={styles.segmentIndex}>{index + 1}.</Text>
-        <View style={[styles.colorIndicator, { backgroundColor: floorColor }]} />
-        <Text style={styles.segmentLabel}>
-          {segment.buildname && segment.buildname !== '야외' 
-            ? `${segment.buildname} ${segment.floor === '야외' ? '' : segment.floor + '층'}`
-            : '야외'}
-        </Text>
-        <Text style={styles.segmentDistance}>
-          {segment.distance > 1000 
-            ? `${(segment.distance/1000).toFixed(1)} km` 
-            : `${segment.distance.toFixed(1)} m`}
+    <View style={styles.routeCardContent}>
+      <View style={styles.routeRow}>
+        <Text style={styles.dotIcon}>🟢</Text>
+        <Text style={styles.routeLabel} numberOfLines={1}>
+          {fromNode?.lect_num || '출발지를 선택하세요'}
         </Text>
       </View>
-    );
-  })}
-</View>
-        </View>
-      )}
+      <View style={styles.routeRow}>
+        <Text style={styles.dotIcon}>🔴</Text>
+        <Text style={styles.routeLabel} numberOfLines={1}>
+          {toNode?.lect_num || '도착지를 선택하세요'}
+        </Text>
+      </View>
+
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+        <TouchableOpacity onPress={() => setFromNode(null)}>
+          <Text style={{ color: '#007AFF', fontSize: 14 }}>출발지 수정</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setToNode(null)}>
+          <Text style={{ color: '#007AFF', fontSize: 14 }}>도착지 수정</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+
+    <TouchableOpacity
+      onPress={() => {
+        setFromNode(null);
+        setToNode(null);
+      }}
+    >
+      <Text style={styles.clearIcon}>✖</Text>
+    </TouchableOpacity>
+  </View>
+)}
+
+{(fromNode && toNode) && (
+  <View style={styles.actionButtonsContainer}>
+    <TouchableOpacity
+      style={[styles.actionButton, styles.navigateButton]}
+      onPress={() => navigation.navigate('Route', { path, nodeImageIds, realviewNode })}
+    >
+      <Text style={styles.navigateButtonText}>길안내 시작</Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      style={[styles.actionButton, styles.detailButton]}
+      onPress={() => setShowPathDetails(!showPathDetails)}
+    >
+      <Text style={styles.detailButtonText}>
+        {showPathDetails ? '상세정보 off' : '경로 상세정보'}
+      </Text>
+    </TouchableOpacity>
+  </View>
+)}
+
+
+{showPathDetails && path.length > 0 && totalDistance !== null && (
+  <View style={styles.summaryWrapper}>
+    
+    {/* 항상 상단에 고정된 버튼 */}
+    <TouchableOpacity
+      style={styles.closeSummaryButton}
+      onPress={() => setShowPathDetails(false)}
+    >
+      <Text style={styles.closeSummaryButtonText}>✖</Text>
+    </TouchableOpacity>
+
+    {/* 스크롤 가능한 상세 경로 리스트 */}
+    <FlatList
+      data={pathSequence}
+      keyExtractor={(_, index) => `segment-${index}`}
+      contentContainerStyle={styles.summaryScrollContainer}
+      ListHeaderComponent={
+        <Text style={styles.summaryText}>
+          총 거리: {totalDistance > 1000
+            ? `${(totalDistance / 1000).toFixed(1)} km`
+            : `${totalDistance.toFixed(1)} m`}
+        </Text>
+      }
+      renderItem={({ item, index }) => {
+        const floorColor = floorColors[item.floor] || floorColors.default;
+        return (
+          <View style={styles.segmentRow}>
+            <Text style={styles.segmentIndex}>{index + 1}.</Text>
+            <View style={[styles.colorIndicator, { backgroundColor: floorColor }]} />
+            <Text style={styles.segmentLabel}>
+              {item.buildname && item.buildname !== '야외' 
+                ? `${item.buildname} ${item.floor === '야외' ? '' : item.floor + '층'}`
+                : '야외'}
+            </Text>
+            <Text style={styles.segmentDistance}>
+              {item.distance > 1000
+                ? `${(item.distance / 1000).toFixed(1)} km`
+                : `${item.distance.toFixed(1)} m`}
+            </Text>
+          </View>
+        );
+      }}
+    />
+  </View>
+)}
+
 
       <MapView
         ref={mapRef}
@@ -634,21 +684,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 5,
   },
-  modifyButton: {
-    backgroundColor: '#9BCBEB',
-    paddingVertical: 5,
-    paddingHorizontal: 5,
-    marginTop: 5,
-    borderRadius: 15,
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  modifyButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 16,
-    textAlign: 'center',
-  },
   colorIndicator: {
     width: 12,
     height: 12,
@@ -695,19 +730,9 @@ const styles = StyleSheet.create({
   },
   floorSelectorWrapper: {
     position: 'absolute',
-    top: 100,
+    top: 170,
     right: 10,
     zIndex: 100,
-  },
-  fixedRouteBox: {
-    position: 'absolute',
-    top: 70,
-    left: 10,
-    right: 10,
-    paddingHorizontal: 10,
-    justifyContent: 'center',
-    zIndex: 10,
-    elevation: 5,
   },
   list: {
     position: 'absolute',
@@ -835,17 +860,81 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginVertical: 2,
   },
-  routeInfoContainer: {
+  switchButton: {
+    backgroundColor: '#9BCBEB',
+  },
+  switchButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },  
+  routeCardBox: {
+    position: 'absolute',
+    top: 70,
+    left: 10,
+    right: 10,
     backgroundColor: 'white',
-    padding: 10,
-    borderRadius: 8,
-  },
-  routeText: {
-    fontSize: 14,
-  },
-  buttonContainer: {
+    borderRadius: 15,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 5,
+    alignItems: 'center',
+    padding: 12,
+    elevation: 6,
+    zIndex: 10,
   },
+  routeCardContent: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  routeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  dotIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  routeLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+  },
+  switchIcon: {
+    fontSize: 20,
+    color: 'black',
+  },
+  clearIcon: {
+    fontSize: 18,
+    color: '#999',
+  },  
+  summaryWrapper: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
+    right: 20,
+    maxHeight: 300, 
+    backgroundColor: 'white',
+    borderRadius: 10,
+    elevation: 10,
+    zIndex: 100,
+  },
+  closeSummaryButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+    alignItems: 'center',
+  },
+  
+  closeSummaryButtonText: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: 'red',
+  },
+  
+  summaryScrollContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 10,
+  },
+  
 });
