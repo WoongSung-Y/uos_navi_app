@@ -637,19 +637,19 @@ const StartScreen = () => {
 
       {selected && (
         <View style={styles.detailContainer}>
-          <Image source={require('../../assets/null.png')} style={styles.image} resizeMode="cover" />
+          <Image source={require('../../assets/no_data.png')} style={styles.image} resizeMode="cover" />
           <View style={styles.buttonRow}>
             <TouchableOpacity 
               style={styles.button} 
               onPress={() => handleSetFromNode(selected)}
             >
-              <Text style={styles.buttonText}>From</Text>
+              <Text style={styles.buttonText}>출발</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.button} 
               onPress={() => handleSetToNode(selected)}
             >
-              <Text style={styles.buttonText}>To</Text>
+              <Text style={styles.buttonText}>도착</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.detailText}>장소명: {selected.lect_num}</Text>
