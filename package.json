@@ -34,7 +34,8 @@
     "react-native-sensors": "^7.3.6",
     "react-native-toast-message": "^2.2.1",
     "react-native-vision-camera": "^4.6.4",
-    "react-native-webview": "^13.13.4"
+    "react-native-webview": "^13.13.4",
+    "utf8": "^3.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

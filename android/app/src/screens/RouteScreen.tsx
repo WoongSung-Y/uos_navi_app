@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -11,17 +10,37 @@ import {
   Platform,
   Text,
 } from 'react-native';
-import MapView, { Polyline, Circle, Polygon, Marker} from 'react-native-maps';
+import MapView, { Polyline, Circle, Polygon, Marker } from 'react-native-maps';
 import { useRoute } from '@react-navigation/native';
-import { fetchBuildingPolygons, fetchFloorPolygons, uploadImageToServer, fetchNodes  } from '../services/api';
+import {
+  fetchBuildingPolygons,
+  fetchFloorPolygons,
+  uploadImageToServer,
+  fetchNodes,
+} from '../services/api';
 import FloorSelector from '../components/FloorSelector';
 import { launchCamera } from 'react-native-image-picker';
 import IndoorLocateButton from '../components/IndoorLocateButton';
-import labelMapping from '../types/label_mapping.json'; // 예: JSON import
+import labelMapping from '../types/label_mapping.json';
+import Geolocation from '@react-native-community/geolocation';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
 const FIXED_THRESHOLD = 5;
+
+const calculateBearing = (from, to) => {
+  const lat1 = from.latitude * Math.PI / 180;
+  const lon1 = from.longitude * Math.PI / 180;
+  const lat2 = to.latitude * Math.PI / 180;
+  const lon2 = to.longitude * Math.PI / 180;
+  const dLon = lon2 - lon1;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  let brng = Math.atan2(y, x);
+  brng = (brng * 180) / Math.PI;
+  return (brng + 360) % 360;
+};
 
 const requestCameraPermission = async () => {
   if (Platform.OS === 'android') {
@@ -44,7 +63,9 @@ const getDistanceInMeters = (coord1, coord2) => {
   const φ2 = coord2.latitude * Math.PI / 180;
   const Δφ = (coord2.latitude - coord1.latitude) * Math.PI / 180;
   const Δλ = (coord2.longitude - coord1.longitude) * Math.PI / 180;
-  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  const a =
+    Math.sin(Δφ / 2) ** 2 +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -64,37 +85,117 @@ const RouteScreen = () => {
   const [buildingPolygons, setBuildingPolygons] = useState([]);
   const [showFloorSelector, setShowFloorSelector] = useState(false);
   const [doortype, setDoortype] = useState<string>('indoor');
-  const [PredictedNodeId,setPredictedNodeId] = useState<string | null>(null);
-  const [PredictedFloorId,setPredictedFloorId] = useState<string | null>(null);
+  const [PredictedNodeId, setPredictedNodeId] = useState<string | null>(null);
+  const [PredictedFloorId, setPredictedFloorId] = useState<string | null>(null);
   const flatListRef = useRef(null);
   const mapRef = useRef(null);
   const [mapZoomLevel, setMapZoomLevel] = useState(0);
+  const [transitionMessage, setTransitionMessage] = useState<string | null>(null);
+  const [bearing, setBearing] = useState(0); // 현재 회전 각도
+  const [prevHeading, setPrevHeading] = useState(0);
 
+  const HEADING_THRESHOLD = 10; // 최소 회전 변화 각도 (10도 이상일 때만 회전)
+  const ALPHA = 0.1; // 부드러운 회전을 위한 EMA 계수
 
   const mapStyle = [
-    { elementType: "labels", stylers: [{ visibility: "off" }] },
-    { featureType: "poi", stylers: [{ visibility: "on" }] },
-    { featureType: "transit", stylers: [{ visibility: "on" }] },
+    { elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'poi', stylers: [{ visibility: 'on' }] },
+    { featureType: 'transit', stylers: [{ visibility: 'on' }] },
   ];
   const [nodes, setNodes] = useState([]);
-  const didInitMap = useRef(false);
-  useEffect(() => {
-    if (!didInitMap.current && path.length > 0 && path[0]?.coordinates?.length > 0) {
-      const { latitude, longitude } = path[0].coordinates[0];
-      mapRef.current?.animateToRegion({
-        latitude,
-        longitude,
-        latitudeDelta: 0.0004,
-        longitudeDelta: 0.0004,
-      });
-      didInitMap.current = true;
-    }
-  }, [path]);
 
-  const extractRoomNumber = (lectNum: string) => {
-    const match = lectNum.match(/(\d+호)/);
-    return match ? match[1] : lectNum;
-  };  
+  // 현재 노드와 다음 노드를 기반으로 회전(heading) 계산 및 부드러운 전환 적용 (MapView 외부에서 animateCamera에 사용할 값 업데이트)
+  useEffect(() => {
+    const currentNode = realviewNode[currentIndex];
+    const nextNode = realviewNode[currentIndex + 1];
+
+    if (!currentNode) return;
+
+    // 실내/실외 전환 감지
+    if (currentIndex === 0) {
+      setIsIndoor(currentNode.type === 'indoor');
+    }
+
+    if (nextNode && currentNode.transit === true) {
+      if (isIndoor && nextNode.type === 'outdoor') {
+        setIsIndoor(false);
+        setTransitionMessage('실외에요~ 카메라 자유롭게 해도 돼요~');
+      } else if (!isIndoor && nextNode.type === 'indoor') {
+        setIsIndoor(true);
+        setTransitionMessage('실내에요~ 카메라 정면으로 들어주세요!');
+      }
+    }
+
+    // 회전 방향 계산
+    if (nextNode) {
+      const from = {
+        latitude: currentNode.nodeLatitude,
+        longitude: currentNode.nodeLongitude,
+      };
+      const rawBearing = calculateBearing(from, {
+        latitude: nextNode.nodeLatitude,
+        longitude: nextNode.nodeLongitude,
+      });
+      console.log('✔️ 회전각:', rawBearing);
+      let diff = Math.abs(prevHeading - rawBearing);
+      if (diff > 180) {
+        diff = 360 - diff;
+      }
+
+      if (diff >= HEADING_THRESHOLD) {
+        let adjustedBearing = rawBearing;
+        if (Math.abs(prevHeading - rawBearing) > 180) {
+          if (rawBearing < prevHeading) {
+            adjustedBearing = rawBearing + 360;
+          } else {
+            adjustedBearing = rawBearing - 360;
+          }
+        }
+        const smoothHeading = prevHeading * (1 - ALPHA) + adjustedBearing * ALPHA;
+        console.log('✔️ 부드러운 회전각:', smoothHeading);
+        const normalizedHeading = (smoothHeading + 360) % 360;
+        setBearing(rawBearing);
+        setPrevHeading(normalizedHeading);
+      }
+    }
+  }, [currentIndex]);
+
+  // transition 메시지 3초 후 삭제
+  useEffect(() => {
+    if (!transitionMessage) return;
+    const timer = setTimeout(() => {
+      setTransitionMessage(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [transitionMessage]);
+
+  // 실외인 경우 위치 업데이트
+  useEffect(() => {
+    let watchId = null;
+    if (!isIndoor) {
+      watchId = Geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          setCurrentLocation({ latitude, longitude });
+          setCurrentAccuracy(accuracy);
+        },
+        (error) => {
+          console.warn('GPS 오류:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          distanceFilter: 1,
+          interval: 3000,
+          fastestInterval: 1000,
+        }
+      );
+    }
+    return () => {
+      if (watchId !== null) {
+        Geolocation.clearWatch(watchId);
+      }
+    };
+  }, [isIndoor]);
 
   useEffect(() => {
     const loadNodes = async () => {
@@ -106,15 +207,10 @@ const RouteScreen = () => {
 
   useEffect(() => {
     if (PredictedNodeId === null && PredictedFloorId === null) return;
-  
-    const labelList = labelMapping[PredictedFloorId]; // 층에 맞는 리스트
-    const matchedNodeId = labelList?.[PredictedNodeId]; // pred_class_idx로 노드 ID 조회
-  
+    const labelList = labelMapping[PredictedFloorId];
+    const matchedNodeId = labelList?.[PredictedNodeId];
     if (!matchedNodeId) return;
-  
     console.log('✔ 매핑된 노드 ID:', matchedNodeId);
-    console.log('✔ 매핑된 층:', PredictedFloorId);
-    console.log('✔ 매핑된 노드:', nodes.find(node => node.nodeId === matchedNodeId));
     const matchIndex = realviewNode.findIndex(n => n.nodeId === matchedNodeId);
     console.log('✔ 매칭된 인덱스:', matchIndex);
     if (matchIndex !== -1) {
@@ -202,26 +298,36 @@ const RouteScreen = () => {
     }
   }, [currentLocation]);
 
+  // ← 여기서 MapView 외부에서 animateCamera를 호출하여 지도 중심과 회전(heading)을 업데이트
   useEffect(() => {
     const currentnode = realviewNode[currentIndex];
-    mapRef.current?.animateToRegion({
-      latitude: currentnode.nodeLatitude,
-      longitude: currentnode.nodeLongitude,
-      latitudeDelta: 0.0001,
-      longitudeDelta: 0.0001
-    });
-  }, [currentIndex]);
-  
+    if (currentnode && mapRef.current) {
+      mapRef.current.animateCamera({
+        center: {
+          latitude: currentnode.nodeLatitude,
+          longitude: currentnode.nodeLongitude,
+        },
+        heading: bearing, // 외부에서 계산한 회전각
+        pitch: 0,
+        zoom: 19.5,
+      });
+    }
+  }, [currentIndex, bearing]);
+
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
+        provider="google"
         style={styles.map}
         customMapStyle={mapStyle}
         showsUserLocation={false}
         showsBuildings={false}
         onPress={() => setSelectedBuildingId(null)}
-        onRegionChangeComplete={(region) => setMapZoomLevel(region.latitudeDelta)}
+        // onRegionChangeComplete에서는 zoom 관련 상태만 업데이트 (회전 로직은 위 useEffect에서 처리)
+        onRegionChangeComplete={(region) => {
+          setMapZoomLevel(region.latitudeDelta);
+        }}
       >
         {path.map((edge) => (
           (!selectedFloor || edge.floor?.toString() === selectedFloor) && (
@@ -254,26 +360,21 @@ const RouteScreen = () => {
           }
         })}
 
-{realviewNode
-  .filter(node => (node.floor ?? null) === (selectedFloor ?? null))
-  .map((node, i) => (
-    <Circle
-      key={`realview-node-${i}`}
-      center={{ latitude: node.nodeLatitude, longitude: node.nodeLongitude }}
-      radius={0.5}
-      strokeColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
-      fillColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
-      onPress={() => {
-        setCurrentIndex(i);
-        mapRef.current?.animateToRegion({
-          latitude: node.nodeLatitude,
-          longitude: node.nodeLongitude,
-          latitudeDelta: 0.0004,
-          longitudeDelta: 0.0004,
-        });
-      }}
-    />
-))}
+        {realviewNode
+          .filter(node => (node.floor ?? null) === (selectedFloor ?? null))
+          .map((node, i) => (
+            <Circle
+              key={`realview-node-${i}`}
+              center={{ latitude: node.nodeLatitude, longitude: node.nodeLongitude }}
+              radius={0.5}
+              strokeColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
+              fillColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
+              onPress={() => {
+                setCurrentIndex(i);
+              }}
+            />
+          ))
+        }
 
         {currentLocation && !isIndoor && currentAccuracy && (
           <Circle
@@ -281,53 +382,50 @@ const RouteScreen = () => {
             radius={currentAccuracy}
             strokeColor="rgba(0,200,0,0.6)"
             fillColor="rgba(0,200,0,0.15)"
-            
           />
         )}
-        
-        
+
         {/* 층 폴리곤 */}
         {FloorPolygons.map((feature, index) => {
-  try {
-    const geojson = JSON.parse(feature.geom_json);
-    const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
+          try {
+            const geojson = JSON.parse(feature.geom_json);
+            const polygons = geojson.type === 'Polygon' ? [geojson.coordinates] : geojson.coordinates;
+            return polygons.map((polygon, i) => {
+              const coords = polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
+              const latSum = coords.reduce((sum, c) => sum + c.latitude, 0);
+              const lngSum = coords.reduce((sum, c) => sum + c.longitude, 0);
+              const center = {
+                latitude: latSum / coords.length,
+                longitude: lngSum / coords.length,
+              };
 
-    return polygons.map((polygon, i) => {
-      const coords = polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
-      const latSum = coords.reduce((sum, c) => sum + c.latitude, 0);
-      const lngSum = coords.reduce((sum, c) => sum + c.longitude, 0);
-      const center = {
-        latitude: latSum / coords.length,
-        longitude: lngSum / coords.length,
-      };
-
-      return (
-        <React.Fragment key={`floor-${index}-${i}`}>
-          <Polygon
-            coordinates={coords}
-            fillColor="rgba(0, 255, 0, 0.3)"
-            strokeColor="black"
-            strokeWidth={2}
-          />
-        {feature.lect_num && mapZoomLevel < 0.003 && (
-          <Marker coordinate={center}>
-  <View style={styles.lectNumBadge}>
-    <Text style={styles.lectNumText}>
-      {extractRoomNumber(feature.lect_num)}
-    </Text>
-  </View>
-</Marker>
-
-        )}
-
-        </React.Fragment>
-      );
-    });
-  } catch {
-    return null;
-  }
-})}
-  
+              return (
+                <React.Fragment key={`floor-${index}-${i}`}>
+                  <Polygon
+                    coordinates={coords}
+                    fillColor="rgba(0, 255, 0, 0.3)"
+                    strokeColor="black"
+                    strokeWidth={2}
+                  />
+                  {feature.lect_num && mapZoomLevel < 0.003 && (
+                    <Marker coordinate={center}>
+                      <View style={styles.lectNumBadge}>
+                        <Text style={styles.lectNumText}>
+                          {(() => {
+                            const match = feature.lect_num.match(/(\d+호)/);
+                            return match ? match[1] : feature.lect_num;
+                          })()}
+                        </Text>
+                      </View>
+                    </Marker>
+                  )}
+                </React.Fragment>
+              );
+            });
+          } catch {
+            return null;
+          }
+        })}
       </MapView>
 
       {showFloorSelector && (
@@ -340,33 +438,40 @@ const RouteScreen = () => {
         </View>
       )}
 
-      <View style={styles.imageListContainer}>
-        
-      <FlatList
-        ref={flatListRef}
-        data={realviewNode}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={true}
-        keyExtractor={(item, index) => `${item.nodeLatitude}-${item.nodeLongitude}-${index}`}
-        onMomentumScrollEnd={(e) => {
-          const index = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-          setCurrentIndex(index);
-        }}
-        renderItem={({ item }) => (
-          <Image
-            source={{ uri: `http://15.165.159.29:3000/images/${item.imageName}.jpg` }}
-            style={[styles.image, { width: screenWidth - 20 }]}
-            resizeMode="contain"
-          />
-        )}
-      />
+      {transitionMessage && (
+        <View style={styles.resultBox}>
+          <Text style={styles.resultText}>{transitionMessage}</Text>
+        </View>
+      )}
 
+      <View style={styles.imageListContainer}>
+        <FlatList
+          ref={flatListRef}
+          data={realviewNode}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={true}
+          keyExtractor={(item, index) =>
+            `${item.nodeLatitude}-${item.nodeLongitude}-${index}`
+          }
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+            setCurrentIndex(index);
+          }}
+          renderItem={({ item }) => (
+            <Image
+              source={{
+                uri: `http://15.165.159.29:3000/images/${item.imageName}.jpg`,
+              }}
+              style={[styles.image, { width: screenWidth - 20 }]}
+              resizeMode="contain"
+            />
+          )}
+        />
       </View>
       <View style={styles.buttonWrapper}>
-  <Button title="📸" onPress={handleTakePhoto} />
-</View>
-
+        <Button title="📸" onPress={handleTakePhoto} />
+      </View>
 
       <View style={styles.indoorButtonWrapper}>
         <IndoorLocateButton
@@ -381,7 +486,6 @@ const RouteScreen = () => {
     </View>
   );
 };
-
 
 export default RouteScreen;
 
@@ -449,7 +553,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,
     shadowRadius: 2,
-    elevation: 4, // Android용 그림자
+    elevation: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -457,5 +561,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     color: '#333',
-  },  
+  },
 });

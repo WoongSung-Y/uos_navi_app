@@ -237,6 +237,8 @@ const StartScreen = () => {
             buildname: node.bulid_name,
             imageName: `${p.edge}_${p.node}`,
             nodeId: node?.node_id,
+            type: node?.type,
+            transit : node?.transit,
           };
         });
       
