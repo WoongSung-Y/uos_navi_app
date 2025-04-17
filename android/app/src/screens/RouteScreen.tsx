@@ -26,8 +26,9 @@ import Geolocation from '@react-native-community/geolocation';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
-const FIXED_THRESHOLD = 5;
+const FIXED_THRESHOLD = 5; // 절대버퍼 반경
 
+// 현재 위치와 다음 위치 간의 방위각 (Heading) 계산
 const calculateBearing = (from, to) => {
   const lat1 = from.latitude * Math.PI / 180;
   const lon1 = from.longitude * Math.PI / 180;
@@ -42,6 +43,7 @@ const calculateBearing = (from, to) => {
   return (brng + 360) % 360;
 };
 
+// 카메라 권한 요청
 const requestCameraPermission = async () => {
   if (Platform.OS === 'android') {
     const granted = await PermissionsAndroid.request(
@@ -57,6 +59,8 @@ const requestCameraPermission = async () => {
   return true;
 };
 
+// 사용자 ~ 이미지 노드 사이의 거리 계산
+// Haversine 공식을 사용하여 두 좌표 간의 거리 계산 (GPS 신호로 받기 때문)
 const getDistanceInMeters = (coord1, coord2) => {
   const R = 6371e3;
   const φ1 = coord1.latitude * Math.PI / 180;
@@ -70,6 +74,8 @@ const getDistanceInMeters = (coord1, coord2) => {
   return R * c;
 };
 
+////////////////////////////////////////
+////////////////////////////////////////
 const RouteScreen = () => {
   const route = useRoute();
   const { path, nodeImageIds, realviewNode } = route.params;
@@ -105,6 +111,7 @@ const RouteScreen = () => {
   const [nodes, setNodes] = useState([]);
 
   // 현재 노드와 다음 노드를 기반으로 회전(heading) 계산 및 부드러운 전환 적용 (MapView 외부에서 animateCamera에 사용할 값 업데이트)
+  // 실내 /실외 전환 감지 및 메시지 설정
   useEffect(() => {
     const currentNode = realviewNode[currentIndex];
     const nextNode = realviewNode[currentIndex + 1];
@@ -165,7 +172,7 @@ const RouteScreen = () => {
     if (!transitionMessage) return;
     const timer = setTimeout(() => {
       setTransitionMessage(null);
-    }, 3000);
+    }, 3000); //3000ms
     return () => clearTimeout(timer);
   }, [transitionMessage]);
 
@@ -196,7 +203,8 @@ const RouteScreen = () => {
       }
     };
   }, [isIndoor]);
-
+ 
+  // 전체 노드 리스트 불러옴
   useEffect(() => {
     const loadNodes = async () => {
       const data = await fetchNodes();
@@ -205,6 +213,7 @@ const RouteScreen = () => {
     loadNodes();
   }, []);
 
+  // 예측된 노드 결과에 따라 이동
   useEffect(() => {
     if (PredictedNodeId === null && PredictedFloorId === null) return;
     const labelList = labelMapping[PredictedFloorId];
@@ -219,6 +228,7 @@ const RouteScreen = () => {
     }
   }, [PredictedNodeId, PredictedFloorId]);
 
+  // 사진 촬영 및 서버 업로드
   const handleTakePhoto = async () => {
     const granted = await requestCameraPermission();
     if (!granted) return;
@@ -232,6 +242,7 @@ const RouteScreen = () => {
     await uploadImageToServer(uri, fileName);
   };
 
+  // 층 정보 동기화 및 선택 처리
   useEffect(() => {
     if (realviewNode.length > 0 && realviewNode[currentIndex].floor) {
       setSelectedFloor(realviewNode[currentIndex].floor.toString());
@@ -239,6 +250,7 @@ const RouteScreen = () => {
     }
   }, [currentIndex]);
 
+  // 층 정보 동기화 및 선택
   useEffect(() => {
     const currentFloor = realviewNode[currentIndex]?.floor;
     if (currentFloor) {
@@ -251,6 +263,7 @@ const RouteScreen = () => {
     }
   }, [currentIndex]);
 
+  // 층별 폴리곤 정보 가져오기
   useEffect(() => {
     const loadFloorPolygons = async () => {
       if (selectedBuildingId && selectedFloor) {
@@ -263,6 +276,7 @@ const RouteScreen = () => {
     loadFloorPolygons();
   }, [selectedBuildingId, selectedFloor]);
 
+  // 건물 폴리곤 불러오기
   useEffect(() => {
     const loadData = async () => {
       const buildings = await fetchBuildingPolygons();
@@ -275,6 +289,7 @@ const RouteScreen = () => {
     loadData();
   }, [currentIndex]);
 
+  // 건물 이름 -> ID 매핑
   useEffect(() => {
     if (realviewNode.length === 0 || !realviewNode[currentIndex]?.buildname) return;
     const currentBuildName = realviewNode[currentIndex].buildname;
@@ -282,21 +297,28 @@ const RouteScreen = () => {
     if (match) setSelectedBuildingId(match.id);
   }, [currentIndex, buildingPolygons, path]);
 
-  // 5m 버퍼 안의 노드로 자동 전환
-  useEffect(() => {
-    if (!currentLocation || path.length === 0) return;
-    for (let i = 0; i < path.length; i++) {
-      const coord = path[i].coordinates[0];
-      const distance = getDistanceInMeters(currentLocation, coord);
-      if (distance < FIXED_THRESHOLD) {
-        if (nodeImageIds[i] !== nodeImageIds[currentIndex]) {
-          setCurrentIndex(i);
-          flatListRef.current?.scrollToIndex({ index: i, animated: true });
-        }
-        break;
+// 수정된 코드 (realviewNode 기준으로 정확하게 전환)
+useEffect(() => {
+  if (!currentLocation || realviewNode.length === 0) return;
+
+  for (let i = 0; i < realviewNode.length; i++) {
+    const imageNode = realviewNode[i];
+    const nodeCoord = {
+      latitude: imageNode.nodeLatitude,
+      longitude: imageNode.nodeLongitude,
+    };
+    const distance = getDistanceInMeters(currentLocation, nodeCoord);
+
+    if (distance < FIXED_THRESHOLD) {
+      if (i !== currentIndex) {
+        setCurrentIndex(i);
+        flatListRef.current?.scrollToIndex({ index: i, animated: true });
       }
+      break;
     }
-  }, [currentLocation]);
+  }
+}, [currentLocation]);
+
 
   // ← 여기서 MapView 외부에서 animateCamera를 호출하여 지도 중심과 회전(heading)을 업데이트
   useEffect(() => {
@@ -313,7 +335,9 @@ const RouteScreen = () => {
       });
     }
   }, [currentIndex, bearing]);
-
+  
+  /////////////////////////////////////////
+  /////////////////////////////////////////
   return (
     <View style={styles.container}>
       <MapView
