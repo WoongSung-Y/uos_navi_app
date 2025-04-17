@@ -99,9 +99,11 @@ const RouteScreen = () => {
   const [transitionMessage, setTransitionMessage] = useState<string | null>(null);
   const [bearing, setBearing] = useState(0); // 현재 회전 각도
   const [prevHeading, setPrevHeading] = useState(0);
+  const [smoothedLocation, setSmoothedLocation] = useState(null);
 
   const HEADING_THRESHOLD = 10; // 최소 회전 변화 각도 (10도 이상일 때만 회전)
   const ALPHA = 0.1; // 부드러운 회전을 위한 EMA 계수
+  const SMOOTHING_ALPHA = 0.2; // 위치 필터링 (EMA 필터) 부드러움 정도
 
   const mapStyle = [
     { elementType: 'labels', stylers: [{ visibility: 'off' }] },
@@ -179,11 +181,50 @@ const RouteScreen = () => {
   // 실외인 경우 위치 업데이트
   useEffect(() => {
     let watchId = null;
-    if (!isIndoor) {
-      watchId = Geolocation.watchPosition(
+  
+    const fetchInitialLocation = async () => {
+      try {
+        Geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            setCurrentLocation({ latitude, longitude });
+            setCurrentAccuracy(accuracy);
+          },
+          (error) => {
+            console.warn('초기 위치 가져오기 실패:', error);
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 5000, // 5초 안에 못 잡으면 실패
+            maximumAge: 0, // 캐시 없이 최신 GPS
+          }
+        );
+      } catch (error) {
+        console.warn('초기 위치 오류:', error);
+      }
+    };
+  
+    if (!isIndoor) { // 실내 -> 실외로 바뀌자마자 getCurrentPosition 호출
+      fetchInitialLocation(); // 실외로 나가자마자 한 번만 현재 위치 잡기
+      watchId = Geolocation.watchPosition( // EMA 필터링 후 currentLocation 갱신
         (position) => {
           const { latitude, longitude, accuracy } = position.coords;
-          setCurrentLocation({ latitude, longitude });
+          const newLocation = { latitude, longitude };
+      
+          if (smoothedLocation) {
+            // 이전 위치가 있다면 부드럽게 업데이트
+            const filteredLatitude = SMOOTHING_ALPHA * newLocation.latitude + (1 - SMOOTHING_ALPHA) * smoothedLocation.latitude;
+            const filteredLongitude = SMOOTHING_ALPHA * newLocation.longitude + (1 - SMOOTHING_ALPHA) * smoothedLocation.longitude;
+      
+            const filteredLocation = { latitude: filteredLatitude, longitude: filteredLongitude };
+            setSmoothedLocation(filteredLocation);
+            setCurrentLocation(filteredLocation);
+          } else {
+            // 첫 위치라면 바로 사용
+            setSmoothedLocation(newLocation);
+            setCurrentLocation(newLocation);
+          }
+      
           setCurrentAccuracy(accuracy);
         },
         (error) => {
@@ -197,12 +238,14 @@ const RouteScreen = () => {
         }
       );
     }
+  
     return () => {
       if (watchId !== null) {
         Geolocation.clearWatch(watchId);
       }
     };
   }, [isIndoor]);
+  
  
   // 전체 노드 리스트 불러옴
   useEffect(() => {
