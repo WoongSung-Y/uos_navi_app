@@ -80,7 +80,7 @@ useEffect(() => {
         } catch (e) {
           console.warn('❌ 업로드 실패:', e);
         }
-      }, 3000); // ✅ 너무 빠르지 않게 5초 간격 추천
+      }, 2000); // ✅ 너무 빠르지 않게 5초 간격 추천
     };
   
     const initializeAndStart = async () => {
@@ -153,9 +153,9 @@ useEffect(() => {
           <View style={styles.resultDisplay}>
             <Text style={styles.resultText}>
               ✅ 분석결과
-              {'\n'}모델: {uploadResult?.result?.model}
-              {'\n'}클래스: {uploadResult?.result?.pred_class_idx}
-              {'\n'}총 클래스 수: {uploadResult?.result?.num_classes}
+              {'\n'}예측 노드: {uploadResult?.result?.predicted_class}
+              {'\n'}거리: {uploadResult?.result?.distance}
+              {'\n'}층수: {uploadResult?.result?.estimated_floor}
             </Text>
           </View>
         )}

@@ -21,7 +21,6 @@ import {
 import FloorSelector from '../components/FloorSelector';
 import { launchCamera } from 'react-native-image-picker';
 import IndoorLocateButton from '../components/IndoorLocateButton';
-import labelMapping from '../types/label_mapping.json';
 import Geolocation from '@react-native-community/geolocation';
 
 const screenHeight = Dimensions.get('window').height;
@@ -258,12 +257,8 @@ const RouteScreen = () => {
 
   // 예측된 노드 결과에 따라 이동
   useEffect(() => {
-    if (PredictedNodeId === null && PredictedFloorId === null) return;
-    const labelList = labelMapping[PredictedFloorId];
-    const matchedNodeId = labelList?.[PredictedNodeId];
-    if (!matchedNodeId) return;
-    console.log('✔ 매핑된 노드 ID:', matchedNodeId);
-    const matchIndex = realviewNode.findIndex(n => n.nodeId === matchedNodeId);
+    if (PredictedNodeId === null && PredictedFloorId === null) return;;
+    const matchIndex = realviewNode.findIndex(n => n.nodeId === PredictedNodeId);
     console.log('✔ 매칭된 인덱스:', matchIndex);
     if (matchIndex !== -1) {
       setCurrentIndex(matchIndex);
@@ -545,7 +540,7 @@ useEffect(() => {
           doortype={doortype}
           initialFloor={initialFloor}
           onResult={(result) => {
-            setPredictedNodeId(result.result.pred_class_idx);
+            setPredictedNodeId(result.result.predicted_class);
             setPredictedFloorId(result.result.estimated_floor);
           }}
         />
