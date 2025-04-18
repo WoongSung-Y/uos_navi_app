@@ -9,6 +9,8 @@ import {
   PermissionsAndroid,
   Platform,
   Switch,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import MapView, { Marker, Callout, Polygon } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
@@ -16,6 +18,8 @@ import { useNavigation } from '@react-navigation/native';
 import { fetchBuildingPolygons, fetchPOINodes, fetchFloorPolygons } from '../services/api';
 import FloorSelector from '../components/FloorSelector';
 import type { Node, Building } from '../types/types';
+import axios from 'axios';
+
 
 const categories = ['라운지', '도서관', '카페', '주차장'];
 
@@ -38,6 +42,11 @@ const StartScreen = () => {
   const [poiNodes, setPoiNodes] = useState<Node[]>([]);
   const [mode, setMode] = useState<'default' | 'settings' | 'restaurant' | 'notice'>('default');
   const [mapZoomLevel, setMapZoomLevel] = useState<number>(0); // 줌 상태 추적
+  const [restaurantMenus, setRestaurantMenus] = useState<{ [key: string]: string }>({});
+
+  const [menuModalVisible, setMenuModalVisible] = useState(false);
+  const [selectedRestaurantName, setSelectedRestaurantName] = useState('');
+  const [selectedRestaurantMenu, setSelectedRestaurantMenu] = useState('');
 
   const [userSettings, setUserSettings] = useState({
     elderly: false,
@@ -73,6 +82,27 @@ const StartScreen = () => {
     }
     return true;
   };
+
+  
+  const fetchRestaurantMenus = async () => {
+    try {
+      const res = await axios.get('http://15.165.159.29:3000/api/menu');
+      setRestaurantMenus(res.data); // 전체 식당 메뉴를 state에 저장
+    } catch (e) {
+      console.error('메뉴 불러오기 실패:', e);
+    }
+  };
+  
+  
+
+  // 식당 이름 → cafeIdx 매핑표
+  const cafeMapping: { [key: string]: number } = {
+    "100주년기념관 이룸라운지": 10,
+    "학생회관 식당": 20,
+    "양식당": 30,
+    "자연과학관 식당":40,
+  };
+
 
   useEffect(() => {
     const loadFloorPolygons = async () => {
@@ -110,12 +140,40 @@ const StartScreen = () => {
   useEffect(() => {
     fetchBuildingPolygons().then(setBuildingPolygons).catch(console.error);
     fetchPOINodes().then(setPoiNodes).catch(console.error);
+    fetchRestaurantMenus(); // 앱 시작 시 메뉴 가져오기
   }, []);
 
   const toggleSetting = (key: keyof typeof userSettings) => {
     setUserSettings((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
+  
+  const handleRestaurantMarkerPress = (lect_num: string) => {
+    const matchedKey = Object.keys(cafeMapping).find(key => lect_num.includes(key));
+    if (!matchedKey) {
+      console.warn('매칭되는 식당 없음:', lect_num);
+      return;
+    }
+    const locationId = cafeMapping[matchedKey]; // 10, 20, 30 등
+    
+    const cafeMenu = restaurantMenus[locationId]?.menus;
+  
+    if (cafeMenu) {
+      const menuText = Object.entries(cafeMenu)
+        .map(([type, items]) => `${type}\n${items}`)
+        .join('\n\n'); // 🍴 조식/중식/석식 이쁘게 구분
+  
+      setSelectedRestaurantName(matchedKey);
+      setSelectedRestaurantMenu(menuText);
+      setMenuModalVisible(true);
+    } else {
+      setSelectedRestaurantName(matchedKey);
+      setSelectedRestaurantMenu('메뉴 정보가 없습니다.');
+      setMenuModalVisible(true);
+    }
+  };
+  
+  
+  
   const renderCategoryMarkers = () => {
     if (!selectedCategory) return null;
     return poiNodes
@@ -140,11 +198,18 @@ const StartScreen = () => {
           key={node.node_id}
           coordinate={{ latitude: parseFloat(node.latitude), longitude: parseFloat(node.longitude) }}
           pinColor="#9BCBEB"
+          onPress={() => handleRestaurantMarkerPress(node.lect_num)}
         >
-          <Callout><Text>{node.lect_num}</Text></Callout>
+          <Callout>
+            <View style={{ maxWidth: 200 }}>
+              <Text style={{ fontWeight: 'bold' }}>{node.lect_num}</Text>
+            </View>
+          </Callout>
         </Marker>
       ));
   };
+  
+  
 
   const renderNoticeMarker = () => {
     if (mode !== 'notice') return null;
@@ -320,11 +385,18 @@ const StartScreen = () => {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.iconButton} onPress={() => {
-          setMode(prev => (prev === 'restaurant' ? 'default' : 'restaurant'));
+          setMode(prev => {
+            const newMode = prev === 'restaurant' ? 'default' : 'restaurant';
+            if (newMode === 'restaurant') {
+              fetchRestaurantMenus();  // 식당 모드 들어갈 때 메뉴 가져오기
+            }
+            return newMode;
+          });
           setSelectedCategory(null);
-        }}>
-          <Image source={require('../../assets/meal.png')} style={styles.icon} />
-        </TouchableOpacity>
+      }}>
+        <Image source={require('../../assets/meal.png')} style={styles.icon} />
+      </TouchableOpacity>
+
 
         <TouchableOpacity style={styles.iconButton} onPress={() => {
           setMode(prev => (prev === 'settings' ? 'default' : 'settings'));
@@ -354,6 +426,31 @@ const StartScreen = () => {
           ))}
         </View>
       )}
+
+  <Modal
+      animationType="slide"
+      transparent={true}
+      visible={menuModalVisible}
+      onRequestClose={() => setMenuModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{selectedRestaurantName}</Text>
+  
+          <View style={styles.menuContainer}>
+            <ScrollView>
+                <Text style={styles.modalMenu}>{selectedRestaurantMenu}</Text>
+            </ScrollView>
+          </View>
+
+          <TouchableOpacity style={styles.closeButton} onPress={() => setMenuModalVisible(false)}>
+            <Text style={styles.closeButtonText}>닫기</Text>
+          </TouchableOpacity>
+      </View>
+
+      </View>
+    </Modal>
+
     </View>
   );
 };
@@ -415,4 +512,43 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  modalMenu: {
+    fontSize: 14,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  closeButton: {
+    backgroundColor: '#9BCBEB',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  menuContainer: {
+    maxHeight: 300, // 모달 안에서 스크롤 허용할 최대 높이
+    marginBottom: 20,
+  },
+  
+  
 });
