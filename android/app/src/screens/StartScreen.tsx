@@ -47,6 +47,7 @@ const StartScreen = () => {
   const [menuModalVisible, setMenuModalVisible] = useState(false);
   const [selectedRestaurantName, setSelectedRestaurantName] = useState('');
   const [selectedRestaurantMenu, setSelectedRestaurantMenu] = useState('');
+  const [selectedMealTime, setSelectedMealTime] = useState<'조식' | '중식' | '석식'>('중식');
 
   const [userSettings, setUserSettings] = useState({
     elderly: false,
@@ -67,6 +68,27 @@ const StartScreen = () => {
     return match ? match[1] : lectNum;
   };
   
+  const requestCameraPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: '카메라 권한 요청',
+            message: '실내 위치 분석을 위해 카메라 권한이 필요합니다.',
+            buttonPositive: '허용',
+            buttonNegative: '거부',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn('카메라 권한 요청 중 오류:', err);
+        return false;
+      }
+    }
+    return true;
+  };
+
   const requestLocationPermission = async () => {
     if (Platform.OS === 'android') {
       const granted = await PermissionsAndroid.request(
@@ -86,7 +108,7 @@ const StartScreen = () => {
   
   const fetchRestaurantMenus = async () => {
     try {
-      const res = await axios.get('http://15.165.159.29:3000/api/menu');
+      const res = await axios.get('http://3.39.165.203:3000/api/menu');
       setRestaurantMenus(res.data); // 전체 식당 메뉴를 state에 저장
     } catch (e) {
       console.error('메뉴 불러오기 실패:', e);
@@ -103,6 +125,9 @@ const StartScreen = () => {
     "자연과학관 식당":40,
   };
 
+useEffect(() => {
+  requestCameraPermission();
+}, []);
 
   useEffect(() => {
     const loadFloorPolygons = async () => {
@@ -438,11 +463,31 @@ const StartScreen = () => {
           <Text style={styles.modalTitle}>{selectedRestaurantName}</Text>
   
           <View style={styles.menuContainer}>
-            <ScrollView>
-                <Text style={styles.modalMenu}>{selectedRestaurantMenu}</Text>
-            </ScrollView>
-          </View>
-
+  <ScrollView>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 }}>
+      {['조식', '중식', '석식'].map((meal) => (
+        <TouchableOpacity
+          key={meal}
+          onPress={() => setSelectedMealTime(meal as '조식' | '중식' | '석식')}
+          style={{
+            paddingVertical: 6,
+            paddingHorizontal: 16,
+            borderRadius: 20,
+            backgroundColor: selectedMealTime === meal ? '#9BCBEB' : '#eee',
+          }}
+        >
+          <Text style={{ fontWeight: 'bold', color: selectedMealTime === meal ? 'white' : 'black' }}>
+            {meal}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+    <Text style={styles.modalMenu}>
+      {restaurantMenus[cafeMapping[selectedRestaurantName]]?.menus?.[selectedMealTime] || '메뉴 정보가 없습니다.'}
+    </Text>
+  </ScrollView>
+</View>
+d
           <TouchableOpacity style={styles.closeButton} onPress={() => setMenuModalVisible(false)}>
             <Text style={styles.closeButtonText}>닫기</Text>
           </TouchableOpacity>

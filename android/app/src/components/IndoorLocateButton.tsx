@@ -3,8 +3,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  PermissionsAndroid,
-  Platform,
   View,
 } from 'react-native';
 import {
@@ -13,57 +11,115 @@ import {
   useCameraPermission,
 } from 'react-native-vision-camera';
 import { uploadIndoorPhoto } from '../services/api';
-import { barometer, setUpdateIntervalForType,SensorTypes   } from 'react-native-sensors';
+import { barometer, setUpdateIntervalForType, SensorTypes } from 'react-native-sensors';
 import RNFS from 'react-native-fs';
+import NetInfo from '@react-native-community/netinfo';
 
 type Props = {
   doortype: 'indoor' | 'outdoor';
   initialFloor: number;
-  onResult?: (result: any) => void; // ← 이거 props에 추가!
+  autoStart?: boolean;
+  onResult?: (result: any) => void;
 };
 
-const IndoorLocateButton = ({ doortype, initialFloor, onResult }: Props) => {
+const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Props) => {
   const [isCapturing, setIsCapturing] = useState(false);
   const cameraRef = useRef<Camera>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const device = useCameraDevice('back');
-  const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraReady, setCameraReady] = useState(false);
   const [pressure, setPressure] = useState<number | null>(null);
   const [uploadResult, setUploadResult] = useState<any | null>(null);
-  const isFirstShot = useRef(true);
   const pressureRef = useRef<number | null>(null);
-
-  // 🌡️ 기압 수신
-useEffect(() => {
-  setUpdateIntervalForType(SensorTypes.barometer, 500);
-  const sub = barometer.subscribe(({ pressure }) => {
-    setPressure(pressure); // 여기까지는 잘 되어 있음
-  });
-  return () => sub.unsubscribe();
-}, []);
+  const recentResults = useRef<string[]>([]);
+  const [isConnected, setIsConnected] = useState(true);
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected ?? false);
+    });
+    return () => unsubscribe();
+  }, []);
+  useEffect(() => {
+    console.log('🚀 IndoorLocateButton mounted');
+    console.log('🚀 doortype:', doortype)
+    console.log('🚀 isCapturing:', isCapturing);
+    console.log('🚀 autoStart:', autoStart);
+    if (autoStart && !isCapturing) {
+      console.log('🚀 실내로 진입했으므로 자동 시작');
+      setIsCapturing(true);
+    }
+  }, [autoStart]);
+    
+  useEffect(() => {
+    setUpdateIntervalForType(SensorTypes.barometer, 500);
+    const sub = barometer.subscribe(({ pressure }) => {
+      setPressure(pressure);
+    });
+    return () => sub.unsubscribe();
+  }, []);
 
   useEffect(() => {
     pressureRef.current = pressure;
   }, [pressure]);
-  
-  useEffect(() => {
-    if (!isCapturing || !cameraReady || !device) return;
-  
-    if (pressureRef.current === null) {
-      console.log('🌀 압력값 없음, 대기 중...');
-      return;
+
+  const updateWithMajorityVote = (newClass: string, rawResult: any) => {
+    recentResults.current.push(newClass);
+    if (recentResults.current.length > 4) {
+      recentResults.current.shift();
     }
-  
+
+    const counts: Record<string, number> = {};
+    for (const cls of recentResults.current) {
+      counts[cls] = (counts[cls] || 0) + 1;
+    }
+
+    const [majorityClass, count] = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])[0];
+
+    if (count >= 3) {
+      console.log('✅ 다수결 통과:', majorityClass);
+      const majorityResult = {
+        ...rawResult,
+        result: {
+          ...rawResult.result,
+          predicted_class: majorityClass,
+        }
+      };
+      setUploadResult(majorityResult);
+      onResult?.(majorityResult);
+    } else {
+      console.log('⚠️ 다수결 미충족:', counts);
+    }
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!isCapturing || !device) return;
+
+    const waitUntilReady = async () => {
+      while (!cameraReady && !isCancelled) {
+        console.log('⏳ 카메라 준비 대기 중...');
+        await new Promise(res => setTimeout(res, 100));
+      }
+    };
+
     const startLoop = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(async () => {
+        if (isCancelled || !cameraRef.current) return;
+
         try {
           console.log('📸 반복 촬영...');
           const fileName = `indoorlocate_${Date.now()}.jpg`;
           const tempPath = `${RNFS.TemporaryDirectoryPath}/${fileName}`;
-          const photo = await cameraRef.current?.takePhoto({ flash: 'off' });
+          const photo = await cameraRef.current.takePhoto({ flash: 'off' });
           if (photo?.path) await RNFS.copyFile(photo.path, tempPath);
-  
+          if (!isConnected) {
+            console.log('📴 인터넷 없음. 업로드 스킵');
+            return;
+          }
+          
           const result = await uploadIndoorPhoto(
             `file://${tempPath}`,
             fileName,
@@ -71,91 +127,89 @@ useEffect(() => {
             false,
             initialFloor
           );
-  
+
           if (result) {
-            setUploadResult(result);
-            console.log('[📡 분석결과]', result);
-            onResult?.(result);
+            updateWithMajorityVote(result.result.predicted_class, result);
           }
         } catch (e) {
           console.warn('❌ 업로드 실패:', e);
         }
-      }, 2000); // ✅ 너무 빠르지 않게 5초 간격 추천
+      }, 1300);
     };
-  
+
     const initializeAndStart = async () => {
       try {
+        await waitUntilReady();
+        if (isCancelled || !cameraRef.current) return;
+
         console.log('📡 기준 설정 시작');
         const fileName = `indoorlocate_reset_${Date.now()}.jpg`;
         const tempPath = `${RNFS.TemporaryDirectoryPath}/${fileName}`;
-        const photo = await cameraRef.current?.takePhoto({ flash: 'off' });
+        const photo = await cameraRef.current.takePhoto({ flash: 'off' });
         if (photo?.path) await RNFS.copyFile(photo.path, tempPath);
-  
+
         const result = await uploadIndoorPhoto(
           `file://${tempPath}`,
           fileName,
           pressureRef.current,
-          true, // ✅ reset
+          true,
           initialFloor
         );
-  
+
         if (!result || !result.result || result.result.estimated_floor == null) {
           throw new Error('기준 설정 실패 또는 서버 응답 이상');
         }
-  
-        console.log('✅ 기준 설정 완료. 반복 촬영 시작');
-        isFirstShot.current = false;
+
         startLoop();
       } catch (e) {
         console.warn('❌ 기준 설정 실패:', e);
       }
     };
-  
-    initializeAndStart(); // ✅ 최초에 reset 호출 후 시작
-  
+
+    initializeAndStart();
+
     return () => {
+      isCancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = null;
-      isFirstShot.current = true;
       console.log('[📡 반복 중지]');
     };
   }, [isCapturing, cameraReady]);
-  
-  
 
   if (doortype !== 'indoor' || !device) {
-    console.log('⛔ 렌더 차단 - indoor 아님 혹은 device 없음');
     return null;
   }
 
   return (
     <>
-{isCapturing && device && (
-  <Camera
-    ref={cameraRef}
-    style={styles.hiddenCamera}
-    device={device}
-    isActive={true}
-    photo={true}
-    onInitialized={() => {
-      setCameraReady(true);
-      console.log('✅ 카메라 준비 완료');
-    }}
-    onError={(e) => console.error('❌ 카메라 에러:', e)}
-  />
-)}
-
+      {isCapturing && device && (
+        <Camera
+          ref={cameraRef}
+          style={styles.hiddenCamera}
+          device={device}
+          isActive={true}
+          photo={true}
+          onInitialized={() => {
+            setCameraReady(true);
+            console.log('✅ 카메라 준비 완료');
+          }}
+          onError={(e) => console.error('❌ 카메라 에러:', e)}
+        />
+      )}
       <TouchableOpacity
         style={[styles.button, isCapturing && styles.active]}
-        onPress={() => setIsCapturing((prev) => !prev)}
+        onPress={() => {
+          setCameraReady(false);
+          setIsCapturing(prev => !prev);
+        }}
       >
         {uploadResult && (
           <View style={styles.resultDisplay}>
             <Text style={styles.resultText}>
-              ✅ 분석결과
-              {'\n'}예측 노드: {uploadResult?.result?.predicted_class}
-              {'\n'}거리: {uploadResult?.result?.distance}
-              {'\n'}층수: {uploadResult?.result?.estimated_floor}
+              ✅ 분석결과{'\n'}
+              예측 노드: {uploadResult?.result?.predicted_class}{'\n'}
+              거리: {uploadResult?.result?.distance}{'\n'}
+              층수: {uploadResult?.result?.estimated_floor}
             </Text>
           </View>
         )}
@@ -181,19 +235,25 @@ const styles = StyleSheet.create({
   },
   button: {
     position: 'absolute',
-    bottom: 85,
-    left: 10,
+    bottom: 1,
+    left: -55,
     alignItems: 'center',
   },
   text: {
     color: '#fff',
     fontWeight: 'bold',
+    bottom: 65,
+    left: -15,
+    
   },
   pressureText: {
     color: '#fff',
     fontSize: 12,
     textAlign: 'center',
     marginBottom: 4,
+    fontWeight: 'bold',
+    bottom: 70,
+    left:4,
   },
   resultDisplay: {
     position: 'absolute',

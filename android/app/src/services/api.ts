@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { Building, FloorPolygon, Node, Edge } from './src/types';
 
 const apiClient = axios.create({
-  baseURL: 'http://15.165.159.29:3000',
+  baseURL: 'http://3.39.165.203:3000',
   timeout: 10000,
 });
 
@@ -45,7 +45,7 @@ export const uploadIndoorPhoto = async (
   });
 
   try {
-    const response = await fetch('http://15.165.159.29:3000/api/indoor_upload', {
+      const response = await fetch('http://3.39.165.203:3000/api/indoor_upload', {
       method: 'POST',
       body: formData,
       headers: {

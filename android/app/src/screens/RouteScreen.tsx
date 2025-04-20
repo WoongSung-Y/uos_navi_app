@@ -89,9 +89,9 @@ const RouteScreen = () => {
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
   const [buildingPolygons, setBuildingPolygons] = useState([]);
   const [showFloorSelector, setShowFloorSelector] = useState(false);
-  const [doortype, setDoortype] = useState<string>('indoor');
   const [PredictedNodeId, setPredictedNodeId] = useState<string | null>(null);
   const [PredictedFloorId, setPredictedFloorId] = useState<string | null>(null);
+  const [justTransitionedToIndoor, setJustTransitionedToIndoor] = useState(false);
   const flatListRef = useRef(null);
   const mapRef = useRef(null);
   const [mapZoomLevel, setMapZoomLevel] = useState(0);
@@ -99,7 +99,9 @@ const RouteScreen = () => {
   const [bearing, setBearing] = useState(0); // 현재 회전 각도
   const [prevHeading, setPrevHeading] = useState(0);
   const [smoothedLocation, setSmoothedLocation] = useState(null);
+  const currentFloorFromImageNode = Number(realviewNode[currentIndex]?.floor ?? 1);
 
+  
   const HEADING_THRESHOLD = 10; // 최소 회전 변화 각도 (10도 이상일 때만 회전)
   const ALPHA = 0.1; // 부드러운 회전을 위한 EMA 계수
   const SMOOTHING_ALPHA = 0.2; // 위치 필터링 (EMA 필터) 부드러움 정도
@@ -131,9 +133,10 @@ const RouteScreen = () => {
       } else if (!isIndoor && nextNode.type === 'indoor') {
         setIsIndoor(true);
         setTransitionMessage('실내에요~ 카메라 정면으로 들어주세요!');
+        setJustTransitionedToIndoor(true); // 실내로 들어온 순간!
       }
     }
-
+    
     // 회전 방향 계산
     if (nextNode) {
       const from = {
@@ -167,6 +170,17 @@ const RouteScreen = () => {
       }
     }
   }, [currentIndex]);
+
+  
+    // 실내로 들어온 후, autoStart flag를 한번만 true로 만들고 꺼줍니다
+    useEffect(() => {
+      if (justTransitionedToIndoor) {
+        const timer = setTimeout(() => {
+          setJustTransitionedToIndoor(false); // autoStart는 1회만 사용
+        }, 8000);
+        return () => clearTimeout(timer);
+      }
+    }, [justTransitionedToIndoor]);
 
   // transition 메시지 3초 후 삭제
   useEffect(() => {
@@ -339,15 +353,26 @@ const RouteScreen = () => {
 useEffect(() => {
   if (!currentLocation || realviewNode.length === 0) return;
 
+
+  if (currentAccuracy > FIXED_THRESHOLD) {
+    console.log('⛔️ GPS 정밀도 너무 낮아서 위치 반영 안함:', currentAccuracy);
+    return;
+  }
+
   for (let i = 0; i < realviewNode.length; i++) {
     const imageNode = realviewNode[i];
     const nodeCoord = {
       latitude: imageNode.nodeLatitude,
       longitude: imageNode.nodeLongitude,
     };
-    const distance = getDistanceInMeters(currentLocation, nodeCoord);
 
-    if (distance < FIXED_THRESHOLD) {
+    
+    const distance = getDistanceInMeters(currentLocation, nodeCoord);
+    if (imageNode.type !== 'outdoor') continue; // ✅ 실외 노드만 검사
+
+
+    
+    if (distance < currentAccuracy) {
       if (i !== currentIndex) {
         setCurrentIndex(i);
         flatListRef.current?.scrollToIndex({ index: i, animated: true });
@@ -523,26 +548,49 @@ useEffect(() => {
           renderItem={({ item }) => (
             <Image
               source={{
-                uri: `http://15.165.159.29:3000/images/${item.imageName}.jpg`,
+                uri: `http://3.39.165.203:3000/images/${item.imageName}.jpg`,
               }}
-              style={[styles.image, { width: screenWidth - 20 }]}
-              resizeMode="contain"
+              style={[styles.image, { width: screenWidth, height: '100%' }]}
+              resizeMode="cover"
             />
           )}
         />
       </View>
       <View style={styles.buttonWrapper}>
-        <Button title="📸" onPress={handleTakePhoto} />
+        <Button title="📸(피드백)" onPress={handleTakePhoto} />
       </View>
 
       <View style={styles.indoorButtonWrapper}>
         <IndoorLocateButton
-          doortype={doortype}
-          initialFloor={initialFloor}
+          doortype={isIndoor ? 'indoor' : 'outdoor'}
+          initialFloor={currentFloorFromImageNode}
+          autoStart={justTransitionedToIndoor}
           onResult={(result) => {
-            setPredictedNodeId(result.result.predicted_class);
-            setPredictedFloorId(result.result.estimated_floor);
+            const predNodeId = result.result.predicted_class;
+            const predFloor = result.result.estimated_floor;
+            const currentFloor = Number(realviewNode[currentIndex]?.floor);
+          
+            // 1. 예측된 노드가 존재하면 해당 인덱스로
+            let matchIndex = realviewNode.findIndex(n => n.nodeId === predNodeId);
+          
+            // 2. 예측된 노드가 없거나 층이 다르면 → 해당 층의 첫 노드로
+            if (matchIndex === -1 || predFloor !== currentFloor) {
+              const fallbackIndex = realviewNode.findIndex(
+                (n) => Number(n.floor) === Number(predFloor)
+              );
+          
+              if (fallbackIndex !== -1) {
+                matchIndex = fallbackIndex;
+              }
+            }
+          
+            // 3. 최종 결정된 인덱스로 이동
+            if (matchIndex !== -1) {
+              setCurrentIndex(matchIndex);
+              flatListRef.current?.scrollToIndex({ index: matchIndex, animated: true });
+            }
           }}
+          
         />
       </View>
     </View>
@@ -557,14 +605,14 @@ const styles = StyleSheet.create({
   imageListContainer: {
     height: screenHeight * 0.5,
     backgroundColor: '#f5f5f5',
-    paddingVertical: 10,
+    paddingVertical: 0.5,
   },
   image: {
     width: '100%',
     height: '100%',
-    resizeMode: 'contain',
-    marginHorizontal: 10,
-    borderRadius: 10,
+    resizeMode: 'cover', // 또는 stretch
+    marginHorizontal: 0,
+    borderRadius: 0,
     backgroundColor: '#ddd',
   },
   floorSelectorWrapper: {
@@ -575,11 +623,11 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   buttonWrapper: {
-    padding: 10,
+    padding: 0,
     backgroundColor: '#f0f0f0',
     position: 'absolute',
-    bottom: 0,
-    right: 0,
+    bottom: 1,
+    right: 1,
     borderRadius: 10,
   },
   indoorButtonWrapper: {
