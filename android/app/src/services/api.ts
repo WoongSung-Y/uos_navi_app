@@ -20,7 +20,8 @@ export const uploadIndoorPhoto = async (
   fileName: string,
   pressure: number | null,
   reset = false,
-  currentFloor: number | null = null
+  currentFloor: number | null = null,
+  buildingname: string | null = null
 ) => {
   const formData = new FormData();
   formData.append('image', {
@@ -31,6 +32,7 @@ export const uploadIndoorPhoto = async (
 
   formData.append('pressure', pressure?.toString() ?? '');
   formData.append('reset', reset ? 'true' : 'false');
+  formData.append('buildingname', buildingname); // ✅ 요게 꼭 들어가야 함
 
   if (reset && currentFloor !== null) {
     formData.append('current_floor', currentFloor.toString());
@@ -42,6 +44,7 @@ export const uploadIndoorPhoto = async (
     pressure,
     reset,
     currentFloor,
+    buildingname,
   });
 
   try {

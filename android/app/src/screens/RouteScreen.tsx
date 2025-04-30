@@ -27,6 +27,7 @@ const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
 const FIXED_THRESHOLD = 5; // 절대버퍼 반경
 
+
 // 현재 위치와 다음 위치 간의 방위각 (Heading) 계산
 const calculateBearing = (from, to) => {
   const lat1 = from.latitude * Math.PI / 180;
@@ -41,6 +42,34 @@ const calculateBearing = (from, to) => {
   brng = (brng * 180) / Math.PI;
   return (brng + 360) % 360;
 };
+
+const getTurnDirection = (prev, current, next) => {
+  const vectorA = {
+    x: current.nodeLongitude - prev.nodeLongitude,
+    y: current.nodeLatitude - prev.nodeLatitude,
+  };
+  const vectorB = {
+    x: next.nodeLongitude - current.nodeLongitude,
+    y: next.nodeLatitude - current.nodeLatitude,
+  };
+
+  // 벡터 내적 (cosθ 계산용)
+  const dot = vectorA.x * vectorB.x + vectorA.y * vectorB.y;
+  const magA = Math.sqrt(vectorA.x ** 2 + vectorA.y ** 2);
+  const magB = Math.sqrt(vectorB.x ** 2 + vectorB.y ** 2);
+  const cosTheta = dot / (magA * magB);
+
+  // 각도 구하기
+  const angle = Math.acos(cosTheta) * (180 / Math.PI);
+  console.log('✔️계산 각도:', angle);
+  if (angle < 15) return 'straight'; // 15도 이하 차이면 직진으로 간주
+
+  // 외적: 좌/우 판단
+  const cross = vectorA.x * vectorB.y - vectorA.y * vectorB.x;
+  return cross > 0 ? 'left' : 'right';
+};
+
+
 
 // 카메라 권한 요청
 const requestCameraPermission = async () => {
@@ -105,7 +134,7 @@ const RouteScreen = () => {
   const HEADING_THRESHOLD = 10; // 최소 회전 변화 각도 (10도 이상일 때만 회전)
   const ALPHA = 0.1; // 부드러운 회전을 위한 EMA 계수
   const SMOOTHING_ALPHA = 0.2; // 위치 필터링 (EMA 필터) 부드러움 정도
-
+  
   const mapStyle = [
     { elementType: 'labels', stylers: [{ visibility: 'off' }] },
     { featureType: 'poi', stylers: [{ visibility: 'on' }] },
@@ -383,21 +412,48 @@ useEffect(() => {
 }, [currentLocation]);
 
 
-  // ← 여기서 MapView 외부에서 animateCamera를 호출하여 지도 중심과 회전(heading)을 업데이트
-  useEffect(() => {
-    const currentnode = realviewNode[currentIndex];
-    if (currentnode && mapRef.current) {
-      mapRef.current.animateCamera({
-        center: {
-          latitude: currentnode.nodeLatitude,
-          longitude: currentnode.nodeLongitude,
-        },
-        heading: bearing, // 외부에서 계산한 회전각
-        pitch: 0,
-        zoom: 19.5,
-      });
-    }
-  }, [currentIndex, bearing]);
+useEffect(() => {
+  const current = realviewNode[currentIndex];
+  const next = realviewNode[currentIndex + 1];
+  if (!mapRef.current || !current || !next) return;
+
+  const from = {
+    latitude: current.nodeLatitude,
+    longitude: current.nodeLongitude,
+  };
+  const to = {
+    latitude: next.nodeLatitude,
+    longitude: next.nodeLongitude,
+  };
+
+  const rawBearing = calculateBearing(from, to);
+
+  // 중간 지점 계산
+  const midLat = (from.latitude + to.latitude) / 2;
+  const midLng = (from.longitude + to.longitude) / 2;
+
+  // heading 보정
+  let shortestTurn = rawBearing - prevHeading;
+  if (shortestTurn > 180) shortestTurn -= 360;
+  if (shortestTurn < -180) shortestTurn += 360;
+  const correctedHeading = (prevHeading + shortestTurn + 360) % 360;
+
+  // 회전 + 중심 이동 동시에!
+  mapRef.current.animateCamera(
+    {
+      center: { latitude: midLat, longitude: midLng },
+      heading: correctedHeading,
+      pitch: 0,
+      zoom: 19.5,
+    },
+    { duration: 600 }
+  );
+
+  setPrevHeading(correctedHeading);
+}, [currentIndex]);
+
+  
+  
   
   /////////////////////////////////////////
   /////////////////////////////////////////
@@ -556,6 +612,32 @@ useEffect(() => {
           )}
         />
       </View>
+      {(() => {
+        const direction =
+          currentIndex > 0 && currentIndex < realviewNode.length -2
+            ? getTurnDirection(
+                realviewNode[currentIndex],
+                realviewNode[currentIndex +1],
+                realviewNode[currentIndex + 2]
+              )
+            : null;
+
+        return direction && (
+          <View style={styles.directionBox}>
+          <Image
+            source={
+              direction === 'left'
+                ? require('../../assets/arrow_left.png')
+                : direction === 'right'
+                ? require('../../assets/arrow_right.png')
+                : require('../../assets/arrow_straight.png')
+            }
+            style={styles.directionIcon}
+          />
+        </View>
+      );
+      })()}
+      
       <View style={styles.buttonWrapper}>
         <Button title="📸(피드백)" onPress={handleTakePhoto} />
       </View>
@@ -565,6 +647,7 @@ useEffect(() => {
           doortype={isIndoor ? 'indoor' : 'outdoor'}
           initialFloor={currentFloorFromImageNode}
           autoStart={justTransitionedToIndoor}
+          buildingName = {realviewNode[currentIndex].buildname}
           onResult={(result) => {
             const predNodeId = result.result.predicted_class;
             const predFloor = result.result.estimated_floor;
@@ -607,6 +690,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     paddingVertical: 0.5,
   },
+  directionBox: {
+    position: 'absolute',
+    bottom: '40%',
+    left: '1%',
+    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)', // 반투명 배경
+    borderRadius: 12,
+    zIndex: 9999,
+  },
+  
+  directionIcon: {
+    width: 48,
+    height: 48,
+    opacity: 0.95,
+  },  
   image: {
     width: '100%',
     height: '100%',

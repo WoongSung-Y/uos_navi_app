@@ -20,9 +20,10 @@ type Props = {
   initialFloor: number;
   autoStart?: boolean;
   onResult?: (result: any) => void;
+  buildingName: string;
 };
 
-const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Props) => {
+const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult ,buildingName}: Props) => {
   const [isCapturing, setIsCapturing] = useState(false);
   const cameraRef = useRef<Camera>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -33,6 +34,7 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
   const pressureRef = useRef<number | null>(null);
   const recentResults = useRef<string[]>([]);
   const [isConnected, setIsConnected] = useState(true);
+  
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsConnected(state.isConnected ?? false);
@@ -64,7 +66,7 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
 
   const updateWithMajorityVote = (newClass: string, rawResult: any) => {
     recentResults.current.push(newClass);
-    if (recentResults.current.length > 4) {
+    if (recentResults.current.length > 3) {
       recentResults.current.shift();
     }
 
@@ -76,7 +78,7 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
     const [majorityClass, count] = Object.entries(counts)
       .sort((a, b) => b[1] - a[1])[0];
 
-    if (count >= 3) {
+    if (count >= 2) {
       console.log('✅ 다수결 통과:', majorityClass);
       const majorityResult = {
         ...rawResult,
@@ -114,8 +116,12 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
           const fileName = `indoorlocate_${Date.now()}.jpg`;
           const tempPath = `${RNFS.TemporaryDirectoryPath}/${fileName}`;
           const photo = await cameraRef.current.takePhoto({ flash: 'off' });
-          if (photo?.path) await RNFS.copyFile(photo.path, tempPath);
-          if (!isConnected) {
+          if (photo?.path) {
+            await RNFS.copyFile(photo.path, tempPath);
+          
+            // ⏳ 파일 시스템 안정화를 위해 잠깐 기다려줌 (200ms 정도면 충분)
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }          if (!isConnected) {
             console.log('📴 인터넷 없음. 업로드 스킵');
             return;
           }
@@ -125,7 +131,8 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
             fileName,
             pressureRef.current,
             false,
-            initialFloor
+            initialFloor,
+            buildingName
           );
 
           if (result) {
@@ -134,7 +141,7 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
         } catch (e) {
           console.warn('❌ 업로드 실패:', e);
         }
-      }, 1300);
+      }, 1500);
     };
 
     const initializeAndStart = async () => {
@@ -153,7 +160,8 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
           fileName,
           pressureRef.current,
           true,
-          initialFloor
+          initialFloor,
+          buildingName
         );
 
         if (!result || !result.result || result.result.estimated_floor == null) {
@@ -208,7 +216,7 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult }: Prop
             <Text style={styles.resultText}>
               ✅ 분석결과{'\n'}
               예측 노드: {uploadResult?.result?.predicted_class}{'\n'}
-              거리: {uploadResult?.result?.distance}{'\n'}
+              유사?: {uploadResult?.result?.similarity}{'\n'}
               층수: {uploadResult?.result?.estimated_floor}
             </Text>
           </View>
