@@ -119,7 +119,7 @@ const StartScreen = () => {
 
   // 식당 이름 → cafeIdx 매핑표
   const cafeMapping: { [key: string]: number } = {
-    "100주년기념관 이룸라운지": 10,
+    "100주년기념관 식당": 10,
     "학생회관 식당": 20,
     "양식당": 30,
     "자연과학관 식당":40,
