@@ -10,7 +10,7 @@ import {
   Platform,
   Text,
 } from 'react-native';
-import MapView, { Polyline, Circle, Polygon, Marker } from 'react-native-maps';
+import MapView, { Polyline, Circle, Callout, Polygon, Marker } from 'react-native-maps';
 import { useRoute } from '@react-navigation/native';
 import {
   fetchBuildingPolygons,
@@ -110,7 +110,7 @@ const getDistanceInMeters = (coord1, coord2) => {
 ////////////////////////////////////////
 const RouteScreen = () => {
   const route = useRoute();
-  const { path, nodeImageIds, realviewNode } = route.params;
+  const { path, nodeImageIds, realviewNode, fromNode, toNode } = route.params;
   const [lastIndoorResult, setLastIndoorResult] = useState(null);
   const initialFloor = Number(realviewNode[0]?.floor ?? 1);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -642,6 +642,25 @@ useEffect(() => {
             fillColor="rgba(0,200,0,0.15)"
           />
         )}
+
+{fromNode && (
+  <Marker
+    coordinate={{ latitude: fromNode.latitude, longitude: fromNode.longitude }}
+    pinColor="green"
+  >
+    <Callout><Text>출발</Text></Callout>
+  </Marker>
+)}
+
+{toNode && (
+  <Marker
+    coordinate={{ latitude: toNode.latitude, longitude: toNode.longitude }}
+    pinColor="red"
+  >
+    <Callout><Text>도착</Text></Callout>
+  </Marker>
+)}
+
 
         {/* 층 폴리곤 */}
         {FloorPolygons.map((feature, index) => {

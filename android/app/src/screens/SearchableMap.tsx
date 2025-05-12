@@ -432,7 +432,7 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
   <View style={styles.actionButtonsContainer}>
     <TouchableOpacity
       style={[styles.actionButton, styles.navigateButton]}
-      onPress={() => navigation.navigate('Route', { path, nodeImageIds, realviewNode })}
+      onPress={() => navigation.navigate('Route', { path, nodeImageIds, realviewNode, fromNode, toNode })}
     >
       <Text style={styles.navigateButtonText}>길안내 시작</Text>
     </TouchableOpacity>
@@ -658,13 +658,16 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
                     zIndex={1000} // 도로보다 위에 표시
 
                   />
-                {feature.lect_num && mapZoomLevel < 0.003 && (
-                  <Marker coordinate={center}>
-                    <Text style={{ fontSize: 6, fontWeight: 'bold' }}>
-                      {extractRoomNumber(feature.lect_num)}
-                    </Text>
-                  </Marker>
-                )}
+            {feature.lect_num && mapZoomLevel < 0.003 && (
+  <Marker coordinate={center}>
+    <View style={styles.labelContainer}>
+      <Text style={styles.labelText}>
+        {extractRoomNumber(feature.lect_num)}
+      </Text>
+    </View>
+  </Marker>
+)}
+
                 </React.Fragment>
               );
             });
@@ -729,6 +732,43 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
           />
         </View>
       )}
+
+{allNodes.length > 0 && !search && !fromNode && !toNode && (
+  <TouchableOpacity
+    style={styles.setCurrentLocationButton}
+    onPress={() => {
+      if (!currentLocation) {
+        alert('현재 위치를 찾을 수 없습니다. 출발지를 검색해서 선택해주세요.');
+        return;
+      }
+
+      const nearest = findNearestNode(
+        allNodes,
+        currentLocation.latitude,
+        currentLocation.longitude,
+        'outdoor'
+      );
+
+      if (!nearest) {
+        alert('현재 위치 근처에 유효한 노드를 찾지 못했습니다.');
+        return;
+      }
+
+      handleSetFromNode(nearest);
+
+      mapRef.current?.animateToRegion({
+        latitude: nearest.latitude,
+        longitude: nearest.longitude,
+        latitudeDelta: 0.001,
+        longitudeDelta: 0.001,
+      }, 500);
+    }}
+  >
+    <Text style={styles.setCurrentLocationButtonText}>현재 위치에서 출발</Text>
+  </TouchableOpacity>
+)}
+
+
 
       {filtered.length > 0 && (
         <FlatList
@@ -1057,5 +1097,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingBottom: 10,
   },
+  setCurrentLocationButton: {
+    position: 'absolute',
+    top: 70, // 검색창 아래에 위치
+    left: 10,
+    right: 10,
+    backgroundColor: 'white',
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    elevation: 4,
+    zIndex: 10,
+  },
+  
+  setCurrentLocationButtonText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  labelContainer: {
+    backgroundColor: 'white',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+  },
+  labelText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  
+  
   
 });
