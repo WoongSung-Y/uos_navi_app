@@ -17,6 +17,10 @@ import {
   fetchFloorPolygons,
   uploadImageToServer,
   fetchNodes,
+  fetchRoadGeometries,
+  fetchPlantGeometries,
+  fetchSidewalkGeometries,
+  fetchStadiumGeometries,  
 } from '../services/api';
 import FloorSelector from '../components/FloorSelector';
 import { launchCamera } from 'react-native-image-picker';
@@ -25,7 +29,7 @@ import Geolocation from '@react-native-community/geolocation';
 
 const screenHeight = Dimensions.get('window').height;
 const screenWidth = Dimensions.get('window').width;
-const FIXED_THRESHOLD = 5; // 절대버퍼 반경
+const FIXED_THRESHOLD = 8; // 절대버퍼 최대 반경
 
 
 // 현재 위치와 다음 위치 간의 방위각 (Heading) 계산
@@ -129,7 +133,12 @@ const RouteScreen = () => {
   const [prevHeading, setPrevHeading] = useState(0);
   const [smoothedLocation, setSmoothedLocation] = useState(null);
   const currentFloorFromImageNode = Number(realviewNode[currentIndex]?.floor ?? 1);
-
+  const lastPredictedFloorRef = useRef<number | null>(null);
+  
+  const [roadPolygons, setRoadPolygons] = useState<any[]>([]);
+  const [plantPolygons, setPlantPolygons] = useState<any[]>([]);
+  const [sidewalkPolygons, setSidewalkPolygons] = useState<any[]>([]);
+  const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
   
   const HEADING_THRESHOLD = 10; // 최소 회전 변화 각도 (10도 이상일 때만 회전)
   const ALPHA = 0.1; // 부드러운 회전을 위한 EMA 계수
@@ -142,6 +151,27 @@ const RouteScreen = () => {
   ];
   const [nodes, setNodes] = useState([]);
 
+
+  useEffect(() => {
+    const loadOutdoorData = async () => {
+      try {
+        const [roads, plants, sidewalks, stadiums] = await Promise.all([
+          fetchRoadGeometries(),
+          fetchPlantGeometries(),
+          fetchSidewalkGeometries(),
+          fetchStadiumGeometries()
+        ]);
+        setRoadPolygons(roads);
+        setPlantPolygons(plants);
+        setSidewalkPolygons(sidewalks);
+        setStadiumPolygons(stadiums);
+      } catch (e) {
+        console.error('공간 데이터 로딩 실패:', e);
+      }
+    };
+    loadOutdoorData();
+  }, []);
+  
   // 현재 노드와 다음 노드를 기반으로 회전(heading) 계산 및 부드러운 전환 적용 (MapView 외부에서 animateCamera에 사용할 값 업데이트)
   // 실내 /실외 전환 감지 및 메시지 설정
   useEffect(() => {
@@ -298,16 +328,6 @@ const RouteScreen = () => {
     loadNodes();
   }, []);
 
-  // 예측된 노드 결과에 따라 이동
-  useEffect(() => {
-    if (PredictedNodeId === null && PredictedFloorId === null) return;;
-    const matchIndex = realviewNode.findIndex(n => n.nodeId === PredictedNodeId);
-    console.log('✔ 매칭된 인덱스:', matchIndex);
-    if (matchIndex !== -1) {
-      setCurrentIndex(matchIndex);
-      flatListRef.current?.scrollToIndex({ index: matchIndex, animated: true });
-    }
-  }, [PredictedNodeId, PredictedFloorId]);
 
   // 사진 촬영 및 서버 업로드
   const handleTakePhoto = async () => {
@@ -483,6 +503,93 @@ useEffect(() => {
           )
         ))}
 
+ {/* 🛣️ 도로 */}
+{roadPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`road-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(128, 128, 128, 0.5)" // 투명도 조절
+        strokeColor="#444"
+        strokeWidth={1}
+        zIndex={1000} // 도로보다 위에 표시
+
+      />
+    ));
+  } catch (e) {
+    console.warn('도로 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
+{/* 🌳 식생 */}
+{plantPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`plant-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(148, 216, 148, 0.77)" // 녹색
+        strokeColor="#0a0"
+        strokeWidth={1}
+        zIndex={1000} // 도로보다 위에 표시
+
+      />
+    ));
+  } catch (e) {
+    console.warn('식생 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
+{/* 🚶 도보 */}
+{sidewalkPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`sidewalk-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(240, 240, 240, 0.7)" // 연회색 + 약간 투명
+        strokeColor="#aaa"
+        strokeWidth={1}
+        zIndex={1} // 도로보다 위에 표시
+      />
+    ));
+  } catch (e) {
+    console.warn('도보 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
+{/* 🏟️ 운동장 */}
+{stadiumPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`stadium-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(54, 150, 51, 0.86)" // 파랑
+        strokeColor="#4682b4"
+        strokeWidth={1}
+        zIndex={1000} // 도로보다 위에 표시
+
+      />
+    ));
+  } catch (e) {
+    console.warn('운동장 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
         {buildingPolygons.map((feature) => {
           try {
             const geojson = JSON.parse(feature.geom_json);
@@ -491,17 +598,25 @@ useEffect(() => {
               <Polygon
                 key={`polygon-${feature.id}-${i}`}
                 coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
-                fillColor={selectedBuildingId === feature.id ? 'rgba(0,0,255,0.6)' : 'rgba(100,100,100,0.4)'}
+                fillColor={
+                  selectedBuildingId === feature.id
+                  ? "rgba(70, 130, 180, 0.7)" // Steel Blue
+                  : "rgba(200, 200, 200, 0.5)" // Light Gray
+                }
+                zIndex={90} // 도로보다 위에 표시
                 strokeColor="transparent"
                 strokeWidth={0}
-                tappable
+                tappable={true}
                 onPress={() => setSelectedBuildingId(feature.id)}
               />
             ));
-          } catch {
+          } catch (err) {
+            console.warn('GeoJSON 파싱 실패:', err);
             return null;
           }
         })}
+
+
 
         {realviewNode
           .filter(node => (node.floor ?? null) === (selectedFloor ?? null))
@@ -546,7 +661,7 @@ useEffect(() => {
                 <React.Fragment key={`floor-${index}-${i}`}>
                   <Polygon
                     coordinates={coords}
-                    fillColor="rgba(0, 255, 0, 0.3)"
+                    fillColor="rgba(0, 153, 255, 0.3)"
                     strokeColor="black"
                     strokeWidth={2}
                   />
@@ -649,30 +764,36 @@ useEffect(() => {
           autoStart={justTransitionedToIndoor}
           buildingName = {realviewNode[currentIndex].buildname}
           onResult={(result) => {
-            const predNodeId = result.result.predicted_class;
-            const predFloor = result.result.estimated_floor;
-            const currentFloor = Number(realviewNode[currentIndex]?.floor);
-          
-            // 1. 예측된 노드가 존재하면 해당 인덱스로
-            let matchIndex = realviewNode.findIndex(n => n.nodeId === predNodeId);
-          
-            // 2. 예측된 노드가 없거나 층이 다르면 → 해당 층의 첫 노드로
-            if (matchIndex === -1 || predFloor !== currentFloor) {
-              const fallbackIndex = realviewNode.findIndex(
-                (n) => Number(n.floor) === Number(predFloor)
-              );
-          
-              if (fallbackIndex !== -1) {
-                matchIndex = fallbackIndex;
-              }
-            }
-          
-            // 3. 최종 결정된 인덱스로 이동
-            if (matchIndex !== -1) {
-              setCurrentIndex(matchIndex);
-              flatListRef.current?.scrollToIndex({ index: matchIndex, animated: true });
-            }
-          }}
+const predNodeId = result.result.predicted_class;
+const predFloor = result.result.estimated_floor;
+
+// 1. 예측된 노드 ID로 먼저 찾는다.
+let matchIndex = realviewNode.findIndex(n => n.nodeId === predNodeId);
+
+if (matchIndex !== -1) {
+  // ✅ 예측 노드로 바로 이동
+  setCurrentIndex(matchIndex);
+  flatListRef.current?.scrollToIndex({ index: matchIndex, animated: true });
+
+  // 예측된 층수가 이전과 다르면 업데이트
+  if (predFloor !== lastPredictedFloorRef.current) {
+    lastPredictedFloorRef.current = predFloor;
+  }
+} else if (predFloor !== lastPredictedFloorRef.current) {
+  // ✅ 층 전환이 "처음 감지"됐을 때만 첫 노드로 이동
+  const fallbackIndex = realviewNode.findIndex(
+    (n) => Number(n.floor) === Number(predFloor)
+  );
+  if (fallbackIndex !== -1) {
+    setCurrentIndex(fallbackIndex);
+    flatListRef.current?.scrollToIndex({ index: fallbackIndex, animated: true });
+  }
+  lastPredictedFloorRef.current = predFloor;
+}
+
+
+          }
+        }
           
         />
       </View>

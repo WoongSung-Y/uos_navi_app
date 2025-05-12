@@ -36,3 +36,8 @@ export  type RealViewNode = {
   };
   
   export type Path = Edge[];
+
+  export type GeoFeature = {
+    geom_json: string; // ← GeoJSON 포맷 문자열
+  };
+  

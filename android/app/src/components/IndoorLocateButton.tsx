@@ -64,35 +64,44 @@ const IndoorLocateButton = ({autoStart, doortype, initialFloor, onResult ,buildi
     pressureRef.current = pressure;
   }, [pressure]);
 
-  const updateWithMajorityVote = (newClass: string, rawResult: any) => {
-    recentResults.current.push(newClass);
-    if (recentResults.current.length > 3) {
-      recentResults.current.shift();
-    }
+const updateWithMajorityVote = (newClass: string, rawResult: any) => {
+  const similarity = rawResult?.result?.similarity;
+  
+  // 유사도 조건 추가
+  if (similarity == null || similarity > 1.2) {
+    console.log(`⚠️ 유사도 기준 미달: similarity=${similarity}`);
+    return; // 유사도 조건 미달 시 다수결 패스
+  }
 
-    const counts: Record<string, number> = {};
-    for (const cls of recentResults.current) {
-      counts[cls] = (counts[cls] || 0) + 1;
-    }
+  recentResults.current.push(newClass);
+  if (recentResults.current.length > 3) {
+    recentResults.current.shift();
+  }
 
-    const [majorityClass, count] = Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])[0];
+  const counts: Record<string, number> = {};
+  for (const cls of recentResults.current) {
+    counts[cls] = (counts[cls] || 0) + 1;
+  }
 
-    if (count >= 2) {
-      console.log('✅ 다수결 통과:', majorityClass);
-      const majorityResult = {
-        ...rawResult,
-        result: {
-          ...rawResult.result,
-          predicted_class: majorityClass,
-        }
-      };
-      setUploadResult(majorityResult);
-      onResult?.(majorityResult);
-    } else {
-      console.log('⚠️ 다수결 미충족:', counts);
-    }
-  };
+  const [majorityClass, count] = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])[0];
+
+  if (count >= 2) {
+    console.log('✅ 다수결 통과:', majorityClass);
+    const majorityResult = {
+      ...rawResult,
+      result: {
+        ...rawResult.result,
+        predicted_class: majorityClass,
+      }
+    };
+    setUploadResult(majorityResult);
+    onResult?.(majorityResult);
+  } else {
+    console.log('⚠️ 다수결 미충족:', counts);
+  }
+};
+
 
   useEffect(() => {
     let isCancelled = false;

@@ -15,7 +15,7 @@ import {
 import MapView, { Marker, Callout, Polygon } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import { useNavigation } from '@react-navigation/native';
-import { fetchBuildingPolygons, fetchPOINodes, fetchFloorPolygons } from '../services/api';
+import { fetchBuildingPolygons, fetchPOINodes, fetchFloorPolygons, fetchRoadGeometries, fetchPlantGeometries,fetchSidewalkGeometries, fetchStadiumGeometries } from '../services/api';
 import FloorSelector from '../components/FloorSelector';
 import type { Node, Building } from '../types/types';
 import axios from 'axios';
@@ -44,6 +44,13 @@ const StartScreen = () => {
   const [mapZoomLevel, setMapZoomLevel] = useState<number>(0); // 줌 상태 추적
   const [restaurantMenus, setRestaurantMenus] = useState<{ [key: string]: string }>({});
 
+  const [roadPolygons, setRoadPolygons] = useState<any[]>([]);
+const [plantPolygons, setPlantPolygons] = useState<any[]>([]);
+const [sidewalkPolygons, setSidewalkPolygons] = useState<any[]>([]);
+const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
+
+
+
   const [menuModalVisible, setMenuModalVisible] = useState(false);
   const [selectedRestaurantName, setSelectedRestaurantName] = useState('');
   const [selectedRestaurantMenu, setSelectedRestaurantMenu] = useState('');
@@ -59,8 +66,9 @@ const StartScreen = () => {
 
   const mapStyle = [
     { elementType: "labels", stylers: [{ visibility: "off" }] },
-    { featureType: "poi", stylers: [{ visibility: "on" }] },
-    { featureType: "transit", stylers: [{ visibility: "on" }] },
+    { featureType: "poi", stylers: [{ visibility: "off" }] },
+    { featureType: "transit", stylers: [{ visibility: "off" }] },
+    { featureType: "building", stylers: [{ visibility: "off" }] }, // ✅ 건물 끄기
   ];
 
   const extractRoomNumber = (lectNum: string) => {
@@ -161,7 +169,26 @@ useEffect(() => {
     };
     trackLocation();
   }, []);
-
+  useEffect(() => {
+    const loadOutdoorData = async () => {
+      try {
+        const [roads, plants, sidewalks, stadiums] = await Promise.all([
+          fetchRoadGeometries(),
+          fetchPlantGeometries(),
+          fetchSidewalkGeometries(),
+          fetchStadiumGeometries()
+        ]);
+        setRoadPolygons(roads);
+        setPlantPolygons(plants);
+        setSidewalkPolygons(sidewalks);
+        setStadiumPolygons(stadiums);
+      } catch (e) {
+        console.error('공간 데이터 로딩 실패:', e);
+      }
+    };
+    loadOutdoorData();
+  }, []);
+  
   useEffect(() => {
     fetchBuildingPolygons().then(setBuildingPolygons).catch(console.error);
     fetchPOINodes().then(setPoiNodes).catch(console.error);
@@ -272,6 +299,93 @@ useEffect(() => {
           setMapZoomLevel(region.latitudeDelta);
         }}
       >
+{/* 🛣️ 도로 */}
+{roadPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`road-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(128, 128, 128, 0.5)" // 투명도 조절
+        strokeColor="#444"
+        strokeWidth={1}
+        zIndex={1000} // 도로보다 위에 표시
+
+      />
+    ));
+  } catch (e) {
+    console.warn('도로 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
+{/* 🌳 식생 */}
+{plantPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`plant-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(148, 216, 148, 0.77)" // 녹색
+        strokeColor="#0a0"
+        strokeWidth={1}
+        zIndex={1000} // 도로보다 위에 표시
+
+      />
+    ));
+  } catch (e) {
+    console.warn('식생 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
+{/* 🚶 도보 */}
+{sidewalkPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`sidewalk-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(240, 240, 240, 0.7)" // 연회색 + 약간 투명
+        strokeColor="#aaa"
+        strokeWidth={1}
+        zIndex={1} // 도로보다 위에 표시
+      />
+    ));
+  } catch (e) {
+    console.warn('도보 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
+{/* 🏟️ 운동장 */}
+{stadiumPolygons.map((feature, i) => {
+  try {
+    const geo = JSON.parse(feature.geom_json);
+    const polygons = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+    return polygons.map((polygon, j) => (
+      <Polygon
+        key={`stadium-${i}-${j}`}
+        coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
+        fillColor="rgba(54, 150, 51, 0.86)" // 파랑
+        strokeColor="#4682b4"
+        strokeWidth={1}
+        zIndex={1000} // 도로보다 위에 표시
+
+      />
+    ));
+  } catch (e) {
+    console.warn('운동장 폴리곤 파싱 실패:', e);
+    return null;
+  }
+})}
+
         {buildingPolygons.map((feature) => {
           try {
             const geojson = JSON.parse(feature.geom_json);
@@ -282,9 +396,10 @@ useEffect(() => {
                 coordinates={polygon[0].map(([lng, lat]) => ({ latitude: lat, longitude: lng }))}
                 fillColor={
                   selectedBuildingId === feature.id
-                    ? "rgba(0, 0, 255, 0.6)"
-                    : "rgba(100, 100, 100, 0.4)"
+                  ? "rgba(70, 130, 180, 0.7)" // Steel Blue
+                  : "rgba(200, 200, 200, 0.5)" // Light Gray
                 }
+                zIndex={90} // 도로보다 위에 표시
                 strokeColor="transparent"
                 strokeWidth={0}
                 tappable={true}
@@ -315,9 +430,11 @@ useEffect(() => {
                 <React.Fragment key={`floor-${index}-${i}`}>
                   <Polygon
                     coordinates={coords}
-                    fillColor="rgba(0, 255, 0, 0.3)"
+                    fillColor="rgba(0, 153, 255, 0.3)"
                     strokeColor="black"
                     strokeWidth={2}
+                    zIndex={1000} // 도로보다 위에 표시
+
                   />
                 {feature.lect_num && mapZoomLevel < 0.003 && (
                   <Marker coordinate={center}>
@@ -487,7 +604,7 @@ useEffect(() => {
     </Text>
   </ScrollView>
 </View>
-d
+ 
           <TouchableOpacity style={styles.closeButton} onPress={() => setMenuModalVisible(false)}>
             <Text style={styles.closeButtonText}>닫기</Text>
           </TouchableOpacity>

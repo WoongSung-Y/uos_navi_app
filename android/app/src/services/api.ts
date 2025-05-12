@@ -122,6 +122,49 @@ export const fetchBuildingPolygons = async (): Promise<Building[]> => {
     return [];
   }
 };
+// 도로 데이터 가져오기
+export const fetchRoadGeometries = async (): Promise<{ geom_json: string }[]> => {
+  try {
+    const response = await apiClient.get('/api/road');
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    return [];
+  }
+};
+
+// 식생 데이터 가져오기
+export const fetchPlantGeometries = async (): Promise<{ geom_json: string }[]> => {
+  try {
+    const response = await apiClient.get('/api/plant');
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    return [];
+  }
+};
+
+// 도보 데이터 가져오기
+export const fetchSidewalkGeometries = async (): Promise<{ geom_json: string }[]> => {
+  try {
+    const response = await apiClient.get('/api/sidewalk');
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    return [];
+  }
+};
+
+// 운동장 데이터 가져오기
+export const fetchStadiumGeometries = async (): Promise<{ geom_json: string }[]> => {
+  try {
+    const response = await apiClient.get('/api/stadium');
+    return response.data;
+  } catch (error) {
+    handleError(error);
+    return [];
+  }
+};
 
 // 층 폴리곤 불러오기
 export const fetchFloorPolygons = async (
