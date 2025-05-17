@@ -764,7 +764,7 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
       }, 500);
     }}
   >
-    <Text style={styles.setCurrentLocationButtonText}>현재 위치에서 출발</Text>
+    <Text style={styles.setCurrentLocationButtonText}>Go To</Text>
   </TouchableOpacity>
 )}
 
@@ -1097,22 +1097,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingBottom: 10,
   },
-  setCurrentLocationButton: {
-    position: 'absolute',
-    top: 70, // 검색창 아래에 위치
-    left: 10,
-    right: 10,
-    backgroundColor: 'white',
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    elevation: 4,
-    zIndex: 10,
-  },
-  
+setCurrentLocationButton: {
+  position: 'absolute',
+  top: 20,          // 기존 유지
+  right: 10,        // 왼쪽 대신 오른쪽 붙이기
+  backgroundColor: 'white',
+  paddingVertical: 9,  // 위아래 여백 줄임 (기존 10 → 6)
+  paddingHorizontal: 20,
+  borderRadius: 10,
+  alignItems: 'center',
+  elevation: 4,
+  zIndex: 10,
+  // alignSelf: 'flex-start',  // 화면 오른쪽 고정이라서 필요 없음, 제거 가능
+},
   setCurrentLocationButtonText: {
-    color: '#007AFF',
-    fontWeight: 'bold',
+    color: '#000',
+    fontWeight: 'normal',
     fontSize: 15,
   },
   labelContainer: {

@@ -20,7 +20,8 @@ import {
   fetchRoadGeometries,
   fetchPlantGeometries,
   fetchSidewalkGeometries,
-  fetchStadiumGeometries,  
+  fetchStadiumGeometries,
+  fetchShortestPath,  
 } from '../services/api';
 import FloorSelector from '../components/FloorSelector';
 import { launchCamera } from 'react-native-image-picker';
@@ -150,6 +151,12 @@ const RouteScreen = () => {
     { featureType: 'transit', stylers: [{ visibility: 'on' }] },
   ];
   const [nodes, setNodes] = useState([]);
+  const [pathNodes, setPathNodes] = useState([]);
+  const [rawPathNodes, setRawPathNodes] = useState([]);
+  const [elevatorPopup, setElevatorPopup] = useState(null);
+
+  const [showStartMarker, setShowStartMarker] = useState(true);
+
 
 
   useEffect(() => {
@@ -472,8 +479,93 @@ useEffect(() => {
   setPrevHeading(correctedHeading);
 }, [currentIndex]);
 
-  
-  
+useEffect(() => {
+  const loadPathNodes = async () => {
+  if (!fromNode?.node_id || !toNode?.node_id || nodes.length === 0) return;
+
+  try {
+    const fetchedRawPathNodes = await fetchShortestPath(fromNode.node_id, toNode.node_id);
+    setRawPathNodes(fetchedRawPathNodes);
+
+    const enriched = fetchedRawPathNodes.map(pathNode => {
+      const match = nodes.find(n => String(n.node_id) === String(pathNode.node));
+      return {
+        ...pathNode,
+        node_id: pathNode.node,
+        node_att: match?.node_att ?? null,
+        floor: match?.floor ?? null,
+        build_name: match?.build_name ?? null,
+      };
+    });
+    setPathNodes(enriched);
+
+    // ✅ 여기에 넣으세요
+    console.log('🔍 realviewNode 전체:', realviewNode.map(n => n.nodeId));
+    console.log('📦 pathNodes 전체:', enriched.map(n => n.node_id));
+
+  } catch (err) {
+    console.error('❌ 최단경로 노드 불러오기 실패:', err);
+  }
+};
+
+
+  loadPathNodes();
+}, [fromNode, toNode, nodes]);
+
+useEffect(() => {
+  if (!pathNodes || pathNodes.length === 0 || realviewNode.length === 0) return;
+
+  const elevatorIndex = pathNodes.findIndex(n => n.node_att === '5'); // '5'는 엘리베이터
+  if (elevatorIndex <= 0) return;
+
+  const elevatorNode = pathNodes[elevatorIndex];
+  const beforeElevatorNode = pathNodes[elevatorIndex - 1];
+  const afterElevatorNode = pathNodes[elevatorIndex + 1];
+  const currentNode = realviewNode[currentIndex];
+
+  const currentNodeId = currentNode?.nodeId ?? currentNode?.node_id ?? currentNode?.id;
+  console.log('🧩 currentNodeId 결정:', currentNodeId);
+  console.log('🚪 팝업 조건 체크:', {
+    currentNodeId,
+    expectedBeforeId: beforeElevatorNode?.node_id,
+    toFloor: afterElevatorNode?.floor,
+  });
+
+  if (!currentNode || String(currentNodeId) !== String(beforeElevatorNode.node_id)) return;
+
+  // ✅ 단순화된 조건 (건물 무시, 노드 순서만 사용)
+  if (afterElevatorNode?.floor) {
+    setElevatorPopup({
+      fromFloor: beforeElevatorNode.floor ?? '?',
+      toFloor: afterElevatorNode.floor,
+    });
+
+    const timer = setTimeout(() => {
+      setElevatorPopup(null);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }
+}, [currentIndex, pathNodes]);
+
+
+useEffect(() => {
+  if (!currentLocation || !fromNode) return; // 위치 또는 출발지 정보 없으면 종료
+
+  const distFromStart = getDistanceInMeters(currentLocation, {
+    latitude: fromNode.latitude,
+    longitude: fromNode.longitude,
+  });
+
+  if (distFromStart > 5) {
+    setShowStartMarker(false);
+  } else {
+    setShowStartMarker(true);
+  }
+}, [currentLocation, fromNode]);
+
+
+
   
   /////////////////////////////////////////
   /////////////////////////////////////////
@@ -643,6 +735,8 @@ useEffect(() => {
           />
         )}
 
+{/* 출발지 마커 삭제 */}
+{/*
 {fromNode && (
   <Marker
     coordinate={{ latitude: fromNode.latitude, longitude: fromNode.longitude }}
@@ -651,6 +745,7 @@ useEffect(() => {
     <Callout><Text>출발</Text></Callout>
   </Marker>
 )}
+*/}
 
 {toNode && (
   <Marker
@@ -720,6 +815,15 @@ useEffect(() => {
           <Text style={styles.resultText}>{transitionMessage}</Text>
         </View>
       )}
+
+      {elevatorPopup && (
+  <View style={styles.elevatorPopup}>
+    <Text style={styles.elevatorPopupText}>
+      {elevatorPopup.fromFloor}층 → {elevatorPopup.toFloor}층
+    </Text>
+  </View>
+)}
+
 
       <View style={styles.imageListContainer}>
         <FlatList
@@ -910,4 +1014,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+elevatorPopup: {
+  position: 'absolute',
+  bottom: 160,
+  alignSelf: 'center',    // 중앙 정렬
+  backgroundColor: '#fff',
+  borderRadius: 8,
+  paddingVertical: 12,
+  paddingHorizontal: 20,
+  zIndex: 10000,
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 100,
+  maxWidth: 250,
+  elevation: 5,           // 안드로이드 그림자
+},
+
+elevatorPopupText: {
+  color: '#000',            // 검정 글자
+  fontWeight: '600',        // 조금 더 굵게
+  fontSize: 16,
+  textAlign: 'center',
+},
+
 });

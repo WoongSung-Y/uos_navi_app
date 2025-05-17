@@ -19,7 +19,7 @@ const SplashScreen = () => {
     <View style={styles.container}>
       <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />
       <Image
-        source={require('../../assets/FORUS_(7).png')} 
+        source={require('../../assets/UoS_PathFinder.png')} 
         style={styles.logo}
         resizeMode="contain"
       />
