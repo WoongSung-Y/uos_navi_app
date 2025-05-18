@@ -9,6 +9,7 @@ import {
   PermissionsAndroid,
   Platform,
   Text,
+  TouchableOpacity,
 } from 'react-native';
 import MapView, { Polyline, Circle, Callout, Polygon, Marker } from 'react-native-maps';
 import { useRoute } from '@react-navigation/native';
@@ -125,7 +126,7 @@ const RouteScreen = () => {
   const [showFloorSelector, setShowFloorSelector] = useState(false);
   const [PredictedNodeId, setPredictedNodeId] = useState<string | null>(null);
   const [PredictedFloorId, setPredictedFloorId] = useState<string | null>(null);
-  const [justTransitionedToIndoor, setJustTransitionedToIndoor] = useState(false);
+  const [justTransitionedToIndoor, setJustTransitionedToIndoor] = useState(null);
   const flatListRef = useRef(null);
   const mapRef = useRef(null);
   const [mapZoomLevel, setMapZoomLevel] = useState(0);
@@ -195,10 +196,14 @@ const RouteScreen = () => {
     if (nextNode && currentNode.transit === true) {
       if (isIndoor && nextNode.type === 'outdoor') {
         setIsIndoor(false);
-        setTransitionMessage('실외에요~ 카메라 자유롭게 해도 돼요~');
+        setTransitionMessage('실외입니다. 자유롭게 움직이세요!');
+        setJustTransitionedToIndoor(false); // 실외로 나간 순간!
+        setSelectedFloor(null)
+        
+        
       } else if (!isIndoor && nextNode.type === 'indoor') {
         setIsIndoor(true);
-        setTransitionMessage('실내에요~ 카메라 정면으로 들어주세요!');
+        setTransitionMessage('실내입니다. 카메라 정면으로 들어주세요!');
         setJustTransitionedToIndoor(true); // 실내로 들어온 순간!
       }
     }
@@ -242,7 +247,7 @@ const RouteScreen = () => {
     useEffect(() => {
       if (justTransitionedToIndoor) {
         const timer = setTimeout(() => {
-          setJustTransitionedToIndoor(false); // autoStart는 1회만 사용
+          setJustTransitionedToIndoor(null); // autoStart는 1회만 사용
         }, 8000);
         return () => clearTimeout(timer);
       }
@@ -516,7 +521,10 @@ useEffect(() => {
   if (!pathNodes || pathNodes.length === 0 || realviewNode.length === 0) return;
 
   const elevatorIndex = pathNodes.findIndex(n => n.node_att === '5'); // '5'는 엘리베이터
-  if (elevatorIndex <= 0) return;
+  if (elevatorIndex <= 0) {
+    setElevatorPopup(null); // 팝업 닫기
+    return;
+  }
 
   const elevatorNode = pathNodes[elevatorIndex];
   const beforeElevatorNode = pathNodes[elevatorIndex - 1];
@@ -524,16 +532,12 @@ useEffect(() => {
   const currentNode = realviewNode[currentIndex];
 
   const currentNodeId = currentNode?.nodeId ?? currentNode?.node_id ?? currentNode?.id;
-  console.log('🧩 currentNodeId 결정:', currentNodeId);
-  console.log('🚪 팝업 조건 체크:', {
-    currentNodeId,
-    expectedBeforeId: beforeElevatorNode?.node_id,
-    toFloor: afterElevatorNode?.floor,
-  });
 
-  if (!currentNode || String(currentNodeId) !== String(beforeElevatorNode.node_id)) return;
+  if (!currentNode || String(currentNodeId) !== String(beforeElevatorNode.node_id)) {
+    setElevatorPopup(null); // 팝업 닫기
+    return;
+  }
 
-  // ✅ 단순화된 조건 (건물 무시, 노드 순서만 사용)
   if (afterElevatorNode?.floor) {
     setElevatorPopup({
       fromFloor: beforeElevatorNode.floor ?? '?',
@@ -546,7 +550,11 @@ useEffect(() => {
 
     return () => clearTimeout(timer);
   }
+
+  setElevatorPopup(null);
+
 }, [currentIndex, pathNodes]);
+
 
 
 useEffect(() => {
@@ -876,15 +884,16 @@ useEffect(() => {
       );
       })()}
       
-      <View style={styles.buttonWrapper}>
-        <Button title="📸(피드백)" onPress={handleTakePhoto} />
-      </View>
+      <TouchableOpacity style={styles.cameraIconButton} onPress={handleTakePhoto}>
+  <Text style={styles.cameraIconText}>📸</Text>
+      </TouchableOpacity>
+
 
       <View style={styles.indoorButtonWrapper}>
         <IndoorLocateButton
           doortype={isIndoor ? 'indoor' : 'outdoor'}
           initialFloor={currentFloorFromImageNode}
-          autoStart={justTransitionedToIndoor}
+          autoEnd={justTransitionedToIndoor}
           buildingName = {realviewNode[currentIndex].buildname}
           onResult={(result) => {
 const predNodeId = result.result.predicted_class;
@@ -966,7 +975,7 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: {
     padding: 0,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     position: 'absolute',
     bottom: 1,
     right: 1,
@@ -1036,5 +1045,15 @@ elevatorPopupText: {
   fontSize: 16,
   textAlign: 'center',
 },
+cameraIconButton: {
+  position: 'absolute',
+  bottom: "2%",
+  right: "5%",
+  
+},
+cameraIconText: {
+  fontSize: 32, // 아이콘 크기
+},
+
 
 });

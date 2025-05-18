@@ -790,7 +790,8 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
                 }, 500);
               }}
             >
-              <Text>{item.lect_num} ({(item.distance * 111000).toFixed(1)} m)</Text>
+              <Text style= {{color: 'black'}}>{item.lect_num} ({(item.distance * 111000).toFixed(1)} m)</Text>
+
             </TouchableOpacity>
           )}
         />
@@ -888,6 +889,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
+    color: 'black',  // 글자색 추가
   },
   floorSelectorWrapper: {
     position: 'absolute',
@@ -904,12 +906,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     zIndex: 9,
     borderRadius: 8,
+    color: 'black',  // 글자색 추가
+
+    
   },
   header: {
     padding: 10,
     fontWeight: 'bold',
     borderBottomWidth: 1,
     borderColor: '#ccc',
+    color: 'black',  // 글자색 추가
   },
   item: {
     padding: 12,
@@ -925,6 +931,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     elevation: 10,
+      color: 'black',  // 글자색 추가
+
   },
   menuButton: {
     padding: 10,
@@ -934,6 +942,8 @@ const styles = StyleSheet.create({
   menuText: {
     fontSize: 16,
     textAlign: 'center',
+    color: 'black',  // 글자색 추가
+
   },
   summaryContainer: {
     position: 'absolute',
