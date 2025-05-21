@@ -371,6 +371,12 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
     setFromNode(toNode);
     setToNode(fromNode);
   };
+
+  const imageMap = {
+  '21세기관_601호': require('../../assets/21세기관_601호.jpg'),
+  '자연과학관_우체국': require('../../assets/자연과학관_우체국.jpg'),
+};
+
   
   /////////////////////////////////////////////////
   /////////////////////////////////////////////////
@@ -427,6 +433,45 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
     </TouchableOpacity>
   </View>
 )}
+
+{(fromNode || toNode) && (
+  <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginHorizontal: 20, marginTop: 10 }}>
+    {/* 출발지 이미지 */}
+    {fromNode && (
+      <View style={{ flex: 1, alignItems: 'center', marginRight: 5 }}>
+        <Image
+          source={
+            fromNode.lect_num === '우체국'
+              ? require('../../assets/자연과학관_우체국.jpg')
+              : require('../../assets/no_data.png')
+          }
+          style={{ width: '100%', height: 100, borderRadius: 8 }}
+          resizeMode="cover"
+        />
+        <Text style={{ marginTop: 5, fontSize: 12, fontWeight: 'bold', color: 'black' }}>출발지</Text>
+        <Text style={{ fontSize: 12 }}>{fromNode.lect_num}</Text>
+      </View>
+    )}
+
+    {/* 도착지 이미지 */}
+    {toNode && (
+      <View style={{ flex: 1, alignItems: 'center', marginLeft: 5 }}>
+        <Image
+          source={
+            toNode.lect_num === '21세기관601호'
+              ? require('../../assets/21세기관_601호.jpg')
+              : require('../../assets/no_data.png')
+          }
+          style={{ width: '100%', height: 100, borderRadius: 8 }}
+          resizeMode="cover"
+        />
+        <Text style={{ marginTop: 5, fontSize: 12, fontWeight: 'bold', color: 'black' }}>도착지</Text>
+        <Text style={{ fontSize: 12 }}>{toNode.lect_num}</Text>
+      </View>
+    )}
+  </View>
+)}
+
 
 {(fromNode && toNode) && (
   <View style={styles.actionButtonsContainer}>
@@ -797,27 +842,38 @@ const [stadiumPolygons, setStadiumPolygons] = useState<any[]>([]);
         />
       )}
 
-      {selected && (
-        <View style={styles.detailContainer}>
-          <Image source={require('../../assets/no_data.png')} style={styles.image} resizeMode="cover" />
-          <View style={styles.buttonRow}>
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={() => handleSetFromNode(selected)}
-            >
-              <Text style={styles.buttonText}>출발</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={() => handleSetToNode(selected)}
-            >
-              <Text style={styles.buttonText}>도착</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.detailText}>장소명: {selected.lect_num}</Text>
-          <Text style={styles.detailText}>운영시간: 00:00 ~ 23:00</Text>
-        </View>
-      )}
+    {selected && (
+  <View style={styles.detailContainer}>
+    <Image
+      source={
+        selected.lect_num === '우체국'
+          ? require('../../assets/자연과학관_우체국.jpg')
+          : selected.lect_num === '21세기관601호'
+          ? require('../../assets/21세기관_601호.jpg')
+          : require('../../assets/no_data.png')
+      }
+      style={styles.image}
+      resizeMode="cover"
+    />
+    <View style={styles.buttonRow}>
+      <TouchableOpacity 
+        style={styles.button} 
+        onPress={() => handleSetFromNode(selected)}
+      >
+        <Text style={styles.buttonText}>출발</Text>
+      </TouchableOpacity>
+      <TouchableOpacity 
+        style={styles.button} 
+        onPress={() => handleSetToNode(selected)}
+      >
+        <Text style={styles.buttonText}>도착</Text>
+      </TouchableOpacity>
+    </View>
+    <Text style={styles.detailText}>장소명: {selected.lect_num}</Text>
+    <Text style={styles.detailText}>운영시간: 00:00 ~ 23:00</Text>
+  </View>
+)}
+
 
       {showMenu && longPressCoord && (
         <View style={styles.menuContainer}>

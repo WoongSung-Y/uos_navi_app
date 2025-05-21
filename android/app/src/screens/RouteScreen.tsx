@@ -148,7 +148,7 @@ const RouteScreen = () => {
   
   const mapStyle = [
     { elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'poi', stylers: [{ visibility: 'on' }] },
+    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
     { featureType: 'transit', stylers: [{ visibility: 'on' }] },
   ];
   const [nodes, setNodes] = useState([]);
@@ -724,9 +724,9 @@ useEffect(() => {
             <Circle
               key={`realview-node-${i}`}
               center={{ latitude: node.nodeLatitude, longitude: node.nodeLongitude }}
-              radius={0.5}
-              strokeColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
-              fillColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'cyan' : 'gray'}
+              radius={1}
+              strokeColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'red' : 'gray'}
+              fillColor={node.imageName === realviewNode[currentIndex]?.imageName ? 'red' : 'gray'}
               onPress={() => {
                 setCurrentIndex(i);
               }}
@@ -738,8 +738,8 @@ useEffect(() => {
           <Circle
             center={currentLocation}
             radius={currentAccuracy}
-            strokeColor="rgba(0,200,0,0.6)"
-            fillColor="rgba(0,200,0,0.15)"
+            strokeColor="cyan"
+            fillColor="cyan"
           />
         )}
 

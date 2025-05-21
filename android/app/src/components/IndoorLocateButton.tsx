@@ -247,16 +247,6 @@ onInitialized={() => {
     });
   }}
 >
-         {uploadResult && (
-          <View style={styles.resultDisplay}>
-            <Text style={styles.resultText}>
-              ✅ 분석결과{'\n'}
-              예측 노드: {uploadResult?.result?.predicted_class}{'\n'}
-              유사?: {uploadResult?.result?.similarity}{'\n'}
-              층수: {uploadResult?.result?.estimated_floor}
-            </Text>
-          </View>
-        )} 
   <Text style={styles.buttonText}>
     {isCapturing ? 'STOP' : 'START'}
   </Text>
